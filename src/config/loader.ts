@@ -8,16 +8,20 @@ import { fileExists } from '../workspace/filesystem.js';
 
 export async function loadConfig(projectRoot: string): Promise<DevAIConfig> {
   let rawConfig: any = {};
-  
+
   const tsConfigPath = path.join(projectRoot, 'devai.config.ts');
   const jsonConfigPath = path.join(projectRoot, '.devai.json');
-  
+  const aiJsonConfigPath = path.join(projectRoot, '.ai', '.devai.json');
+
   try {
     if (await fileExists(tsConfigPath)) {
       const mod = await import(tsConfigPath);
       rawConfig = mod.default || mod;
     } else if (await fileExists(jsonConfigPath)) {
       const content = await fs.readFile(jsonConfigPath, 'utf8');
+      rawConfig = JSON.parse(content);
+    } else if (await fileExists(aiJsonConfigPath)) {
+      const content = await fs.readFile(aiJsonConfigPath, 'utf8');
       rawConfig = JSON.parse(content);
     }
   } catch (error) {
@@ -53,7 +57,7 @@ export async function loadConfig(projectRoot: string): Promise<DevAIConfig> {
   if (!result.success) {
     throw new ConfigError(`Config validation failed: ${result.error.message}`);
   }
-  
+
   return {
     ...DEFAULT_CONFIG,
     ...result.data,
@@ -62,13 +66,14 @@ export async function loadConfig(projectRoot: string): Promise<DevAIConfig> {
     reviewer: { ...DEFAULT_CONFIG.reviewer, ...result.data.reviewer },
     validation: { ...DEFAULT_CONFIG.validation, ...result.data.validation },
     limits: { ...DEFAULT_CONFIG.limits, ...result.data.limits },
-    security: { ...DEFAULT_CONFIG.security, ...result.data.security }
+    security: { ...DEFAULT_CONFIG.security, ...result.data.security },
   } as DevAIConfig;
 }
 
 export function resolveApiKey(provider: string): string | undefined {
   if (provider === 'openai') return process.env.OPENAI_API_KEY;
   if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY;
-  if (provider === 'google') return process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (provider === 'google')
+    return process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   return undefined;
 }
