@@ -5,11 +5,11 @@ describe('context/selector', () => {
   const mockWorkspaceManager = {
     readFile: vi.fn().mockResolvedValue('dummy content'),
     listFiles: vi.fn().mockResolvedValue([]),
-    getModifiedFiles: vi.fn().mockResolvedValue([])
+    getModifiedFiles: vi.fn().mockResolvedValue([]),
   };
 
   it('extracts meaningful words, filters stop words', () => {
-    // Assuming ContextSelector exposes a static or public method for this, 
+    // Assuming ContextSelector exposes a static or public method for this,
     // or we can test it indirectly via file scoring.
     // Given the prompt, we will test the behavior we can observe.
     const selector = new ContextSelector(mockWorkspaceManager as any);

@@ -10,7 +10,7 @@ describe('skills/discovery', () => {
       purpose: 'React development',
       content: 'react content',
       keywords: ['react', 'frontend', 'ui', 'component'],
-      whenToUse: 'When building user interfaces with React'
+      whenToUse: 'When building user interfaces with React',
     },
     {
       name: 'db',
@@ -18,8 +18,8 @@ describe('skills/discovery', () => {
       purpose: 'Database tasks',
       content: 'db content',
       keywords: ['sql', 'database', 'migration', 'table'],
-      whenToUse: 'When modifying database schema or writing migrations'
-    }
+      whenToUse: 'When modifying database schema or writing migrations',
+    },
   ];
 
   it('matches frontend skill for React-related requests', () => {
@@ -35,7 +35,10 @@ describe('skills/discovery', () => {
   });
 
   it('returns empty array when no skills match', () => {
-    const results = discoverSkills('Do something completely unrelated like docker compose', sampleSkills);
+    const results = discoverSkills(
+      'Do something completely unrelated like docker compose',
+      sampleSkills,
+    );
     expect(results.length).toBe(0);
   });
 

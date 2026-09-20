@@ -26,7 +26,9 @@ describe('plans/validator', () => {
       created: '2026-01-01T00:00:00.000Z',
       updated: '2026-01-01T00:00:00.000Z',
       objective: 'Objective',
-      implementationSteps: [{ id: 'step-1', title: 'Step 1', description: 'desc', status: 'pending' }],
+      implementationSteps: [
+        { id: 'step-1', title: 'Step 1', description: 'desc', status: 'pending' },
+      ],
       acceptanceCriteria: ['Criteria 1'],
       currentState: '',
       relevantFiles: [],
@@ -36,7 +38,7 @@ describe('plans/validator', () => {
       testingStrategy: '',
       risks: [],
       outOfScope: [],
-      dependencies: []
+      dependencies: [],
     };
 
     it('passes for valid plan', () => {

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isValidTransition, validateTransition, isTerminalStatus, getValidNextStatuses } from '../../../src/plans/state-machine.js';
+import {
+  isValidTransition,
+  validateTransition,
+  isTerminalStatus,
+  getValidNextStatuses,
+} from '../../../src/plans/state-machine.js';
 import type { PlanStatus } from '../../../src/plans/types.js';
 
 describe('plans/state-machine', () => {
@@ -44,7 +49,12 @@ describe('plans/state-machine', () => {
       expect(getValidNextStatuses('draft')).toEqual(['awaiting_approval']);
       expect(getValidNextStatuses('completed')).toEqual([]);
       expect(getValidNextStatuses('failed')).toEqual(['draft']);
-      expect(getValidNextStatuses('executing')).toEqual(['validating', 'failed', 'cancelled']);
+      expect(getValidNextStatuses('executing')).toEqual([
+        'validating',
+        'reviewing',
+        'failed',
+        'cancelled',
+      ]);
     });
   });
 });

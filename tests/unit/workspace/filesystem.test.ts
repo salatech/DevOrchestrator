@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { enforceSafePath } from '../../../src/workspace/filesystem.js';
+import { enforceSafePath, isSecretPath } from '../../../src/workspace/filesystem.js';
 import { SecurityError } from '../../../src/errors/index.js';
 
 describe('workspace/filesystem', () => {
@@ -24,10 +24,26 @@ describe('workspace/filesystem', () => {
       expect(() => enforceSafePath(root, '/etc/passwd')).toThrow(SecurityError);
       expect(() => enforceSafePath(root, '/mock/workspace2/file.txt')).toThrow(SecurityError);
     });
-    
+
     it('allows the root itself', () => {
       expect(enforceSafePath(root, '')).toBe(path.resolve('/mock/workspace'));
       expect(enforceSafePath(root, '.')).toBe(path.resolve('/mock/workspace'));
+    });
+  });
+
+  describe('isSecretPath', () => {
+    it('blocks env and key material', () => {
+      expect(isSecretPath('.env')).toBe(true);
+      expect(isSecretPath('.env.local')).toBe(true);
+      expect(isSecretPath('certs/server.pem')).toBe(true);
+      expect(isSecretPath('id_rsa')).toBe(true);
+      expect(isSecretPath('credentials.json')).toBe(true);
+      expect(isSecretPath('gcp-service-account.json')).toBe(true);
+    });
+
+    it('allows example env files and source', () => {
+      expect(isSecretPath('.env.example')).toBe(false);
+      expect(isSecretPath('src/index.ts')).toBe(false);
     });
   });
 });

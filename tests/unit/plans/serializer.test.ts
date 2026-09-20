@@ -17,14 +17,14 @@ describe('plans/serializer', () => {
     filesToModify: [],
     filesToCreate: [],
     implementationSteps: [
-      { id: 'step-1', title: 'Step 1', description: 'Desc 1', status: 'pending' }
+      { id: 'step-1', title: 'Step 1', description: 'Desc 1', status: 'pending' },
     ],
     constraints: [],
     testingStrategy: '',
     acceptanceCriteria: ['Must work'],
     risks: [],
     outOfScope: [],
-    dependencies: []
+    dependencies: [],
   };
 
   it('serializes a Plan then parses it back (round-trip)', () => {

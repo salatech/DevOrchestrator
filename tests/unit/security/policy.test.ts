@@ -4,7 +4,7 @@ import { CommandPolicyChecker } from '../../../src/security/policy.js';
 describe('security/policy', () => {
   const checker = new CommandPolicyChecker({
     'custom command': 'blocked',
-    'special safe': 'safe'
+    'special safe': 'safe',
   });
 
   describe('Safe commands', () => {

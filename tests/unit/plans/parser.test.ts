@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parsePlanFile, parseFrontmatter, parseMarkdownList, parseImplementationSteps } from '../../../src/plans/parser.js';
+import {
+  parsePlanFile,
+  parseFrontmatter,
+  parseMarkdownList,
+  parseImplementationSteps,
+} from '../../../src/plans/parser.js';
 import type { PlanStatus } from '../../../src/plans/types.js';
 
 describe('plans/parser', () => {
@@ -91,13 +96,13 @@ Add the login API route.
       expect(plan.created).toBe('2026-01-01');
       expect(plan.planner).toBe('gpt-4o');
       expect(plan.branch).toBe('main');
-      
+
       expect(plan.objective).toBe('Add basic user authentication.');
       expect(plan.relevantFiles).toEqual(['src/auth.ts', 'src/routes/login.ts']);
-      
+
       expect(plan.implementationSteps).toHaveLength(2);
       expect(plan.implementationSteps[0].title).toBe('Create auth module');
-      
+
       expect(plan.acceptanceCriteria).toEqual(['Users can log in', 'Sessions are maintained']);
     });
 
@@ -115,6 +120,26 @@ Minimal objective`;
       expect(plan.filesToModify).toEqual([]);
       expect(plan.implementationSteps).toEqual([]);
       expect(plan.testingStrategy).toBe('');
+    });
+
+    it('parses known sections headed with ##', () => {
+      const plan = parsePlanFile(`---
+id: PLAN-003
+title: Hash headings
+status: draft
+created: 2026-09-20
+planner: test
+branch: main
+---
+
+## Objective
+Ship the CLI.
+
+## Risks
+- Ambiguous request
+`);
+      expect(plan.objective).toBe('Ship the CLI.');
+      expect(plan.risks).toEqual(['Ambiguous request']);
     });
 
     it('throws on missing required fields (id, title)', () => {
