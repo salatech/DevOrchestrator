@@ -1,5 +1,5 @@
 import type { PlannerAgent, ExecutorAgent, ReviewerAgent } from '../agents/interfaces.js';
-import type { AgentTask } from '../agents/types.js';
+import type { AgentTask, ReviewResult } from '../agents/types.js';
 import { PlanManager } from '../plans/manager.js';
 import { PlanStatus } from '../plans/types.js';
 import type { Plan } from '../plans/types.js';
@@ -12,6 +12,7 @@ import { SecureCommandExecutor } from '../security/executor.js';
 import type { DevAIConfig } from '../config/types.js';
 import type { ProgressCallback, PlanOptions, ExecuteOptions, RunOptions } from './types.js';
 import { ExecutionError, PlanningError } from '../errors/index.js';
+import { redactSecrets } from '../logging/redact.js';
 
 /**
  * Central orchestration engine.
@@ -31,13 +32,17 @@ export class Orchestrator {
     private reviewer: ReviewerAgent,
     private config: DevAIConfig,
     private onProgress?: ProgressCallback,
+    approvalHandler?: (command: string, reason: string) => Promise<boolean>,
   ) {
     const root = workspace.getRoot();
     this.planManager = new PlanManager(root);
     this.contextEngine = new ContextEngine(config.limits.maxContextFiles);
     this.snapshotManager = new SnapshotManager();
     this.tracer = new ExecutionTracer(root);
-    this.commandExecutor = new SecureCommandExecutor(config.security.commandPolicies);
+    this.commandExecutor = new SecureCommandExecutor(
+      config.security.commandPolicies,
+      approvalHandler,
+    );
   }
 
   /**
@@ -76,10 +81,19 @@ export class Orchestrator {
       ...plan,
       id: nextId,
       status: PlanStatus.AwaitingApproval,
-      branch: context.gitState.branch,
+      branch: context.gitState.branch || plan.branch,
       planner: this.planner.name,
       created: new Date().toISOString().split('T')[0],
       updated: new Date().toISOString().split('T')[0],
+      objective: plan.objective?.trim() ? plan.objective : request,
+      implementationSteps:
+        plan.implementationSteps.length > 0
+          ? plan.implementationSteps
+          : [{ number: 1, title: 'Implement request', description: request }],
+      acceptanceCriteria:
+        plan.acceptanceCriteria.length > 0
+          ? plan.acceptanceCriteria
+          : ['The request is implemented', 'Existing tests still pass'],
     };
 
     // Save plan
@@ -99,10 +113,10 @@ export class Orchestrator {
     const plan = await this.planManager.loadPlan(planId);
 
     if (plan.status !== PlanStatus.Approved) {
-      throw new PlanningError(
-        `Plan ${planId} is not approved. Current status: ${plan.status}`,
-        { planId, status: plan.status },
-      );
+      throw new PlanningError(`Plan ${planId} is not approved. Current status: ${plan.status}`, {
+        planId,
+        status: plan.status,
+      });
     }
 
     // Transition to executing
@@ -123,114 +137,147 @@ export class Orchestrator {
     let iteration = 0;
     let lastResult = '';
     let validationResult: ValidationResult | null = null;
-    let reviewResult: import('../agents/types.js').ReviewResult | null = null;
+    let reviewResult: ReviewResult | null = null;
+    const abort = { interrupted: false };
+    const onSignal = () => {
+      abort.interrupted = true;
+    };
+    process.once('SIGINT', onSignal);
+    process.once('SIGTERM', onSignal);
 
     // Execution loop
-    while (iteration < this.config.limits.maxIterations) {
-      iteration++;
-      this.emit({ stage: 'executing', message: `Iteration ${iteration}...`, iteration });
+    try {
+      while (iteration < this.config.limits.maxIterations) {
+        if (abort.interrupted) {
+          break;
+        }
+        iteration++;
+        this.emit({ stage: 'executing', message: `Iteration ${iteration}...`, iteration });
 
-      // Build agent task
-      const task: AgentTask = {
-        plan,
-        context,
-        instructions: this.buildInstructions(plan, lastResult),
-        constraints: plan.constraints,
-        acceptanceCriteria: plan.acceptanceCriteria,
-      };
+        // Build agent task
+        const task: AgentTask = {
+          plan,
+          context,
+          instructions: this.buildInstructions(plan, lastResult),
+          constraints: plan.constraints,
+          acceptanceCriteria: plan.acceptanceCriteria,
+        };
 
-      // Execute
-      const agentResult = await this.executor.execute(task);
+        // Execute
+        const agentResult = await this.executor.execute(task);
 
-      if (agentResult.status === 'blocked') {
-        await this.planManager.transitionStatus(planId, PlanStatus.Failed);
-        throw new ExecutionError(
-          `Executor blocked: ${agentResult.blockReason}`,
-          { planId, blockReason: agentResult.blockReason },
-        );
-      }
+        if (agentResult.status === 'blocked') {
+          await this.planManager.transitionStatus(planId, PlanStatus.Failed);
+          throw new ExecutionError(`Executor blocked: ${agentResult.blockReason}`, {
+            planId,
+            blockReason: agentResult.blockReason,
+          });
+        }
 
-      // Validate
-      if (this.config.validation.commands.length > 0) {
-        this.emit({ stage: 'validating', message: 'Running validation...' });
-        await this.planManager.transitionStatus(planId, PlanStatus.Validating);
-        validationResult = await this.runValidation();
+        // Validate
+        if (this.config.validation.commands.length > 0) {
+          this.emit({ stage: 'validating', message: 'Running validation...' });
+          await this.planManager.transitionStatus(planId, PlanStatus.Validating);
+          validationResult = await this.runValidation();
 
-        if (!validationResult.allPassed) {
-          const failures = validationResult.results
-            .filter((r) => !r.passed)
-            .map((r) => `${r.command}: ${r.output.substring(0, 500)}`)
-            .join('\n');
+          if (!validationResult.allPassed) {
+            const failures = validationResult.results
+              .filter((r) => !r.passed)
+              .map((r) => `${r.command}: ${r.output.substring(0, 500)}`)
+              .join('\n');
 
-          lastResult = `Validation failed:\n${failures}`;
+            lastResult = `Validation failed:\n${failures}`;
 
-          if (iteration >= this.config.limits.maxIterations) {
-            await this.planManager.transitionStatus(planId, PlanStatus.Failed);
-            break;
+            if (iteration >= this.config.limits.maxIterations) {
+              await this.planManager.transitionStatus(planId, PlanStatus.Failed);
+              break;
+            }
+
+            await this.planManager.transitionStatus(planId, PlanStatus.Executing);
+            this.emit({ stage: 'fixing', message: 'Fixing validation errors...', iteration });
+            continue;
           }
+        }
 
-          await this.planManager.transitionStatus(planId, PlanStatus.Executing);
-          this.emit({ stage: 'fixing', message: 'Fixing validation errors...', iteration });
-          continue;
+        // Review
+        this.emit({ stage: 'reviewing', message: 'Reviewing implementation...' });
+        await this.planManager.transitionStatus(planId, PlanStatus.Reviewing);
+
+        const diff = await this.workspace.getDiff();
+        const testOutput = validationResult
+          ? validationResult.results
+              .map((r) => `${r.command}: ${r.passed ? 'PASS' : 'FAIL'}`)
+              .join('\n')
+          : 'No validation configured';
+
+        reviewResult = await this.reviewer.review(plan, diff, testOutput, context);
+
+        if (reviewResult.status === 'approved') {
+          await this.planManager.transitionStatus(planId, PlanStatus.Completed);
+          break;
+        }
+
+        // Changes requested
+        const findings = reviewResult.findings
+          .map(
+            (f) =>
+              `[${f.severity}] ${f.file ? `${f.file}:` : ''}${f.description} → ${f.recommendation}`,
+          )
+          .join('\n');
+
+        lastResult = `Review requested changes:\n${findings}`;
+
+        if (iteration >= this.config.limits.maxIterations) {
+          await this.planManager.transitionStatus(planId, PlanStatus.Failed);
+          break;
+        }
+
+        await this.planManager.transitionStatus(planId, PlanStatus.Executing);
+        this.emit({ stage: 'fixing', message: 'Addressing review findings...', iteration });
+      }
+    } finally {
+      process.removeListener('SIGINT', onSignal);
+      process.removeListener('SIGTERM', onSignal);
+    }
+
+    if (abort.interrupted) {
+      const current = await this.planManager.loadPlan(planId);
+      if (current.status !== PlanStatus.Completed && current.status !== PlanStatus.Cancelled) {
+        try {
+          await this.planManager.transitionStatus(planId, PlanStatus.Cancelled);
+        } catch {
+          await this.planManager.transitionStatus(planId, PlanStatus.Failed).catch(() => current);
         }
       }
-
-      // Review
-      this.emit({ stage: 'reviewing', message: 'Reviewing implementation...' });
-      await this.planManager.transitionStatus(planId, PlanStatus.Reviewing);
-
-      const diff = await this.workspace.getDiff();
-      const testOutput = validationResult
-        ? validationResult.results.map((r) => `${r.command}: ${r.passed ? 'PASS' : 'FAIL'}`).join('\n')
-        : 'No validation configured';
-
-      reviewResult = await this.reviewer.review(plan, diff, testOutput, context);
-
-      if (reviewResult.status === 'approved') {
-        await this.planManager.transitionStatus(planId, PlanStatus.Completed);
-        break;
-      }
-
-      // Changes requested
-      const findings = reviewResult.findings
-        .map((f) => `[${f.severity}] ${f.file ? `${f.file}:` : ''}${f.description} → ${f.recommendation}`)
-        .join('\n');
-
-      lastResult = `Review requested changes:\n${findings}`;
-
-      if (iteration >= this.config.limits.maxIterations) {
-        await this.planManager.transitionStatus(planId, PlanStatus.Failed);
-        break;
-      }
-
-      await this.planManager.transitionStatus(planId, PlanStatus.Executing);
-      this.emit({ stage: 'fixing', message: 'Addressing review findings...', iteration });
     }
 
     // Snapshot after
     const snapshotAfter = await this.snapshotManager.capture(this.workspace);
+    const snapshotDiff = this.snapshotManager.compare(snapshotBefore, snapshotAfter);
     const diffStats = await this.workspace.getDiffStats();
     const durationMs = Date.now() - startTime;
+    const finalStatus = abort.interrupted
+      ? 'cancelled'
+      : reviewResult?.status === 'approved'
+        ? 'completed'
+        : 'failed';
 
-    // Build execution report
     const report: ExecutionReport = {
       planId,
       planTitle: plan.title,
-      status: reviewResult?.status === 'approved' ? 'completed' : 'failed',
+      status: finalStatus,
       iterations: iteration,
-      filesModified: snapshotAfter.modifiedFiles.filter(
-        (f) => !snapshotBefore.modifiedFiles.includes(f),
-      ),
-      filesCreated: [],
-      filesDeleted: [],
+      filesModified: snapshotDiff.filesModified,
+      filesCreated: snapshotDiff.filesAdded,
+      filesDeleted: snapshotDiff.filesRemoved,
       linesAdded: diffStats.insertions,
       linesRemoved: diffStats.deletions,
       validationResults: validationResult,
       reviewResult,
       durationMs,
+      error: abort.interrupted ? 'Execution interrupted' : undefined,
     };
 
-    // Save trace
     const traceId = await this.tracer.getNextId();
     const trace: ExecutionTrace = {
       id: traceId,
@@ -241,7 +288,7 @@ export class Orchestrator {
         executor: this.executor.name,
         reviewer: this.reviewer.name,
       },
-      contextFiles: [],
+      contextFiles: context.relevantFiles.map((file) => file.path),
       iterations: iteration,
       commands: [],
       filesModified: report.filesModified,
@@ -254,13 +301,49 @@ export class Orchestrator {
       snapshotBefore,
       snapshotAfter,
       status: report.status,
+      error: report.error,
       startedAt: new Date(startTime).toISOString(),
       finishedAt: new Date().toISOString(),
     };
     await this.tracer.save(trace);
 
-    this.emit({ stage: 'completed', report });
+    if (finalStatus === 'failed' || finalStatus === 'cancelled') {
+      this.emit({
+        stage: 'failed',
+        error: report.error ?? 'Execution finished without review approval',
+      });
+    } else {
+      this.emit({ stage: 'completed', report });
+    }
     return report;
+  }
+
+  /**
+   * Review the current workspace diff against a plan.
+   */
+  async review(planId: string): Promise<ReviewResult> {
+    const plan = await this.planManager.loadPlan(planId);
+    this.emit({ stage: 'reviewing', message: `Reviewing plan ${planId}...` });
+
+    const context = await this.contextEngine.buildContext(
+      plan.objective,
+      this.workspace,
+      this.planManager,
+    );
+    const diff = await this.workspace.getDiff();
+    const reviewResult = await this.reviewer.review(plan, diff, 'Manual review', context);
+
+    let status = plan.status;
+    if (status === PlanStatus.Executing || status === PlanStatus.Validating) {
+      await this.planManager.transitionStatus(planId, PlanStatus.Reviewing);
+      status = PlanStatus.Reviewing;
+    }
+
+    if (status === PlanStatus.Reviewing && reviewResult.status === 'approved') {
+      await this.planManager.transitionStatus(planId, PlanStatus.Completed);
+    }
+
+    return reviewResult;
   }
 
   /**
@@ -274,8 +357,10 @@ export class Orchestrator {
 
     if (!options.skipApproval) {
       this.emit({ stage: 'awaiting_approval', plan });
-      // In the CLI, the approval flow is handled by the command layer.
-      // Here, we just transition to approved.
+      throw new PlanningError(
+        `Plan ${plan.id} is awaiting approval. Run \`devorch approve ${plan.id}\` then \`devorch execute ${plan.id}\`, or pass --yes.`,
+        { planId: plan.id },
+      );
     }
 
     await this.planManager.transitionStatus(plan.id, PlanStatus.Approved);
@@ -303,12 +388,13 @@ export class Orchestrator {
         const result = await this.commandExecutor.execute({
           command: cmd,
           cwd: this.workspace.getRoot(),
+          allowedRoot: this.workspace.getRoot(),
           timeoutMs: 120_000,
         });
         results.push({
           command: cmd,
           passed: result.exitCode === 0,
-          output: result.stdout + result.stderr,
+          output: redactSecrets(result.stdout + result.stderr),
           durationMs: result.durationMs,
         });
       } catch (error) {

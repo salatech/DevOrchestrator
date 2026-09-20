@@ -20,13 +20,13 @@ export class UsageTracker {
     const byRole: Record<string, TokenUsage> = {};
     let totalInput = 0;
     let totalOutput = 0;
-    
+
     for (const [role, usage] of this.usageByRole) {
       byRole[role] = { ...usage };
       totalInput += usage.inputTokens;
       totalOutput += usage.outputTokens;
     }
-    
+
     return {
       byRole,
       total: { inputTokens: totalInput, outputTokens: totalOutput },
