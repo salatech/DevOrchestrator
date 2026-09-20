@@ -1,5 +1,5 @@
 {
-  "name": "devorch",
+  "name": "@salatech/devorch",
   "version": "0.1.0",
   "description": "Local-first AI developer orchestrator — plan, approve, execute, review",
   "type": "module",

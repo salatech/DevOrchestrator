@@ -80,14 +80,14 @@ CI never publishes and never deploys infrastructure.
    npm publish --access public --tag alpha
    ```
 
-   The package name is `devorch`. The executable is `devorch`. First publish uses the `alpha` dist-tag so `npm install devorch` does not pick it up as a live default until you later `npm dist-tag add devorch@0.1.0 latest`.
+   The package name is `@salatech/devorch`. The executable is `devorch`. First publish uses the `alpha` dist-tag so `npm install @salatech/devorch` does not pick it up as a live default until you later `npm dist-tag add @salatech/devorch@0.1.0 latest`.
 
 There is no automatic `npm publish` from CI.
 
 ## User install (after publish)
 
 ```bash
-npm install -g devorch@alpha
+npm install -g @salatech/devorch@alpha
 devorch --version
 devorch doctor
 ```
@@ -95,7 +95,7 @@ devorch doctor
 From a GitHub Release tarball:
 
 ```bash
-npm install -g ./devorch-0.1.0.tgz
+npm install -g ./salatech-devorch-0.1.0.tgz
 ```
 
 From this repository without publishing:

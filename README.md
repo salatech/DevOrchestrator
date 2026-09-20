@@ -113,12 +113,12 @@ All filesystem writes go through a workspace sandbox. Validation commands go thr
 After the package is published:
 
 ```bash
-npm install -g devorch
+npm install -g @salatech/devorch
 # or
-pnpm add -g devorch
+pnpm add -g @salatech/devorch
 ```
 
-The executable is **`devorch`** (package name `devorch`). Then:
+The executable is **`devorch`** (package name `@salatech/devorch`). Then:
 
 ```bash
 devorch --version
@@ -146,12 +146,12 @@ devorch --help
 
 ### Package manager
 
-The published binary name is `devorch` (package name `devorch`):
+The published binary name is `devorch` (package name `@salatech/devorch`):
 
 ```bash
-pnpm add -g devorch
+pnpm add -g @salatech/devorch
 # or
-npm install -g devorch
+npm install -g @salatech/devorch
 ```
 
 ### Development runner (no build)
