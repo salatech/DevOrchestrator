@@ -1,28 +1,58 @@
 # Security Policy
 
-DevOrchestrator is designed as a **local-first** application with strong security boundaries.
+DevOrchestrator is a **local-first** CLI. The workspace is the source of truth. Do not assume a cloud boundary will protect secrets.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-If you discover a security vulnerability within DevOrchestrator, please report it via the repository's security advisory tab or directly to the maintainers. Do not open public issues for sensitive vulnerabilities.
+Report security issues through this repository's **GitHub Security Advisories** tab:
 
-## Core Security Boundaries
+https://github.com/salatech/DevOrchestrator/security/advisories/new
 
-### Workspace Sandboxing
-DevOrchestrator strictly enforces that all filesystem reads and writes must remain within the current project's workspace. Any attempt by an AI agent or malformed configuration to traverse out of the project directory (e.g., `../../.ssh/id_rsa`) will immediately throw a `SecurityError` and halt execution.
+Do **not** open a public issue for credential leaks, path traversal, command injection, or similar. Do not include live API keys in the report; redact them.
 
-### Context Firewall
-By default, the following files and directories are automatically excluded from the AI context window:
-- `.env` and `.env.*` files
-- Any file ending in `.pem`, `.key`, `.p12`, or `.pfx`
-- Credentials, secrets, and SSH keys
-- Build artifacts (`node_modules`, `dist`, `build`, `coverage`)
-- Git history (`.git/`)
+## What the runtime guarantees
 
-### Execution Policies
-DevOrchestrator uses a strict command execution policy:
-- **Safe**: Read-only checks, test runners, linters (`npm test`, `git status`).
-- **Approval Required**: Dependency changes, git commits, destructive operations.
-- **Blocked**: Extremely dangerous operations (`rm -rf /`, `DROP TABLE`).
+### Workspace sandbox
 
-You can customize this policy in your `.devai.json` under `security.commandPolicies`.
+Filesystem reads, writes, and deletes go through `enforceSafePath`. Paths that resolve outside the project root throw `SecurityError`.
+
+### Context firewall
+
+These are not selected as model context (and `--include` cannot force secrets in):
+
+- `.env`, `.env.*` except `.env.example`
+- `*.pem`, `*.key`, `*.p12`, `*.pfx`, keystores
+- `credentials.*`, `secrets.*`, `service-account*` files
+- SSH private keys and typical cloud credential directories
+- `node_modules`, `.git`, `dist`, `build`, coverage/cache dirs
+
+Inspect before sending:
+
+```bash
+devorch context "your request"
+```
+
+The command lists **included** files, **excluded** files, and the **reason**.
+
+### Command policy
+
+Validation commands are classified as `safe`, `requires_approval`, or `blocked`.
+
+- Shell metacharacters (`;`, `|`, `` ` ``, `$`, …) are blocked (no shell invocation).
+- Commands run as argv via `execa` (`shell: false`).
+- Arguments that escape the workspace are blocked.
+- Force-push, `git reset --hard`, `sudo`, and destructive `rm` patterns are blocked by default.
+
+Customize with `security.commandPolicies` in project config. Custom rules cannot be used to smuggle a blocked shell pipeline.
+
+### Logging and traces
+
+`.ai/runs/*.json` is gitignored. Saved output is passed through secret redaction (API key-like strings, bearer tokens, PEM blocks). Do not paste traces into public issues.
+
+### Providers
+
+API keys live in the environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …), never in `.ai/` documents or source. The CLI does not upload the repository to a DevOrchestrator cloud.
+
+## Out of scope for this policy
+
+A future optional cloud control plane must not require uploading the workspace. If you find a change that sends source or secrets off-machine without an explicit user-configured provider call, treat it as a vulnerability.
