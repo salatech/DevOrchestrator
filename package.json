@@ -1,14 +1,43 @@
 {
-  "name": "devai",
+  "name": "devorch",
   "version": "0.1.0",
-  "description": "AI Developer Orchestrator — separates software planning from execution",
+  "description": "Local-first AI developer orchestrator — plan, approve, execute, review",
   "type": "module",
+  "license": "MIT",
   "bin": {
-    "devai": "./dist/cli.mjs"
+    "devorch": "./dist/cli.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.14.0",
+  "keywords": [
+    "ai",
+    "cli",
+    "developer-tools",
+    "orchestration",
+    "codex",
+    "claude",
+    "local-first"
+  ],
+  "author": "salatech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/salatech/DevOrchestrator.git"
+  },
+  "homepage": "https://github.com/salatech/DevOrchestrator#readme",
+  "bugs": {
+    "url": "https://github.com/salatech/DevOrchestrator/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup",
@@ -16,9 +45,10 @@
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
+    "lint": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "prepublishOnly": "pnpm build"
+    "verify:pack": "node scripts/verify-pack.mjs",
+    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
@@ -35,13 +65,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "prettier": "^3.5.0",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitest": "^2.1.0"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "packageManager": "pnpm@10.14.0"
+  }
 }
