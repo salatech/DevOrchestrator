@@ -7,12 +7,14 @@ import { PlanningError } from '../errors/index.js';
  * @param content The markdown content
  * @returns Object with parsed frontmatter and body
  */
-export function parseFrontmatter<T = Record<string, unknown>>(content: string): { data: T; body: string } {
+export function parseFrontmatter<T = Record<string, unknown>>(
+  content: string,
+): { data: T; body: string } {
   const match = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
   if (!match) {
     return { data: {} as T, body: content };
   }
-  
+
   try {
     const data = parseYaml(match[1]) as T;
     return { data, body: match[2] };
@@ -47,10 +49,10 @@ export function parseImplementationSteps(section: string): ImplementationStep[] 
   const steps: ImplementationStep[] = [];
   const stepRegex = /^##\s*Step\s*(\d+)(?::\s*(.+))?$/gm;
   let currentStep: ImplementationStep | null = null;
-  
+
   const lines = section.split('\n');
   let currentDescription: string[] = [];
-  
+
   for (const line of lines) {
     const stepMatch = line.match(/^##\s*Step\s*(\d+)(?::\s*(.+))?$/);
     if (stepMatch) {
@@ -68,14 +70,30 @@ export function parseImplementationSteps(section: string): ImplementationStep[] 
       currentDescription.push(line);
     }
   }
-  
+
   if (currentStep) {
     currentStep.description = currentDescription.join('\n').trim();
     steps.push(currentStep);
   }
-  
+
   return steps;
 }
+
+const PLAN_SECTIONS = new Set([
+  'objective',
+  'current state',
+  'relevant files',
+  'files to modify',
+  'files to create',
+  'implementation steps',
+  'constraints',
+  'testing strategy',
+  'testing',
+  'acceptance criteria',
+  'risks',
+  'out of scope',
+  'dependencies',
+]);
 
 /**
  * Parse a complete plan file.
@@ -84,34 +102,39 @@ export function parseImplementationSteps(section: string): ImplementationStep[] 
  */
 export function parsePlanFile(content: string): Plan {
   const { data: frontmatter, body } = parseFrontmatter<PlanFrontmatter>(content);
-  
+
   if (!frontmatter.id || !frontmatter.title || !frontmatter.status) {
     throw new PlanningError('Missing required frontmatter fields (id, title, status)');
   }
-  
+
   const sections = new Map<string, string>();
   let lastHeading = '';
-  
+
   const lines = body.split('\n');
   let currentContent: string[] = [];
-  
+
   for (const line of lines) {
-    const headingMatch = line.match(/^#\s+(.+)$/);
-    if (headingMatch) {
+    const headingMatch = line.match(/^(#{1,2})\s+(.+)$/);
+    const headingName = headingMatch?.[2]?.trim() ?? '';
+    const isPlanSection =
+      headingMatch !== null &&
+      (headingMatch[1] === '#' || PLAN_SECTIONS.has(headingName.toLowerCase()));
+
+    if (isPlanSection && headingMatch) {
       if (lastHeading) {
         sections.set(lastHeading.toLowerCase(), currentContent.join('\n').trim());
       }
-      lastHeading = headingMatch[1].trim();
+      lastHeading = headingName;
       currentContent = [];
     } else if (lastHeading) {
       currentContent.push(line);
     }
   }
-  
+
   if (lastHeading) {
     sections.set(lastHeading.toLowerCase(), currentContent.join('\n').trim());
   }
-  
+
   return {
     id: frontmatter.id,
     title: frontmatter.title,
@@ -131,6 +154,6 @@ export function parsePlanFile(content: string): Plan {
     acceptanceCriteria: parseMarkdownList(sections.get('acceptance criteria') || ''),
     risks: parseMarkdownList(sections.get('risks') || ''),
     outOfScope: parseMarkdownList(sections.get('out of scope') || ''),
-    dependencies: parseMarkdownList(sections.get('dependencies') || '')
+    dependencies: parseMarkdownList(sections.get('dependencies') || ''),
   };
 }

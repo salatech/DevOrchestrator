@@ -5,12 +5,21 @@ const transitions = new Map<PlanStatus, PlanStatus[]>([
   [PlanStatus.Draft, [PlanStatus.AwaitingApproval]],
   [PlanStatus.AwaitingApproval, [PlanStatus.Approved, PlanStatus.Cancelled]],
   [PlanStatus.Approved, [PlanStatus.Executing, PlanStatus.Cancelled]],
-  [PlanStatus.Executing, [PlanStatus.Validating, PlanStatus.Failed, PlanStatus.Cancelled]],
-  [PlanStatus.Validating, [PlanStatus.Reviewing, PlanStatus.Executing, PlanStatus.Failed, PlanStatus.Cancelled]],
-  [PlanStatus.Reviewing, [PlanStatus.Completed, PlanStatus.Executing, PlanStatus.Failed, PlanStatus.Cancelled]],
+  [
+    PlanStatus.Executing,
+    [PlanStatus.Validating, PlanStatus.Reviewing, PlanStatus.Failed, PlanStatus.Cancelled],
+  ],
+  [
+    PlanStatus.Validating,
+    [PlanStatus.Reviewing, PlanStatus.Executing, PlanStatus.Failed, PlanStatus.Cancelled],
+  ],
+  [
+    PlanStatus.Reviewing,
+    [PlanStatus.Completed, PlanStatus.Executing, PlanStatus.Failed, PlanStatus.Cancelled],
+  ],
   [PlanStatus.Completed, []],
   [PlanStatus.Failed, [PlanStatus.Draft]],
-  [PlanStatus.Cancelled, []]
+  [PlanStatus.Cancelled, []],
 ]);
 
 /** Check if a status transition is valid */

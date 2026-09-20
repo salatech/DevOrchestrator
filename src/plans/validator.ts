@@ -14,7 +14,17 @@ export function validatePlan(plan: Plan): void {
   if (!plan.title || plan.title.trim() === '') {
     throw new PlanningError('Plan title is missing or empty');
   }
-  const validStatuses = ['draft', 'awaiting_approval', 'approved', 'executing', 'validating', 'reviewing', 'completed', 'failed', 'cancelled'];
+  const validStatuses = [
+    'draft',
+    'awaiting_approval',
+    'approved',
+    'executing',
+    'validating',
+    'reviewing',
+    'completed',
+    'failed',
+    'cancelled',
+  ];
   if (!plan.status || !validStatuses.includes(plan.status)) {
     throw new PlanningError(`Invalid plan status: ${plan.status}`);
   }
