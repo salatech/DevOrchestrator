@@ -1,10 +1,11 @@
 import { defineCommand, runMain } from 'citty';
+import { VERSION } from './version.js';
 
 const main = defineCommand({
   meta: {
-    name: 'devai',
+    name: 'devorch',
     description: 'AI Developer Orchestrator — separates software planning from execution',
-    version: '0.1.0',
+    version: VERSION,
   },
   subCommands: {
     init: () => import('./commands/init.js').then((m) => m.default),

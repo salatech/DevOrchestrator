@@ -2,95 +2,263 @@ import { defineCommand } from 'citty';
 import * as p from '@clack/prompts';
 import pc from 'picocolors';
 import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
 import { ensureDirectory, writeFile, pathExists } from '../workspace/filesystem.js';
-import { detectProjectType, detectPackageManager, detectLanguages, detectFrameworks, readPackageInfo } from '../workspace/detector.js';
+import {
+  detectProjectType,
+  detectPackageManager,
+  detectLanguages,
+  detectFrameworks,
+  readPackageInfo,
+} from '../workspace/detector.js';
 import { WorkspaceManager } from '../workspace/manager.js';
+import { fail } from './helpers.js';
+import type { PackageManager } from '../workspace/types.js';
+
+function defaultValidationCommands(
+  pm: PackageManager,
+  scripts: Record<string, string> | undefined,
+): string[] {
+  const run = (script: string) => {
+    if (pm === 'npm') return `npm run ${script}`;
+    if (pm === 'yarn') return `yarn ${script}`;
+    if (pm === 'bun') return `bun run ${script}`;
+    return `pnpm ${script}`;
+  };
+
+  const commands: string[] = [];
+  if (scripts?.test) commands.push(run('test'));
+  if (scripts?.typecheck) commands.push(run('typecheck'));
+  else if (scripts?.lint) commands.push(run('lint'));
+  return commands;
+}
+
+function skillMarkdown(name: string, purpose: string, whenToUse: string): string {
+  return `# ${name}
+
+## Purpose
+${purpose}
+
+## When To Use
+${whenToUse}
+`;
+}
+
+async function writeIfMissing(filePath: string, content: string): Promise<boolean> {
+  if (await pathExists(filePath)) return false;
+  await writeFile(filePath, content);
+  return true;
+}
+
+async function ensureGitignore(projectRoot: string): Promise<void> {
+  const gitignorePath = path.join(projectRoot, '.gitignore');
+  const entries = ['.ai/state/', '.ai/runs/'];
+
+  if (!(await pathExists(gitignorePath))) {
+    await writeFile(gitignorePath, `${entries.join('\n')}\n`);
+    return;
+  }
+
+  const current = await fs.readFile(gitignorePath, 'utf8');
+  const missing = entries.filter(
+    (entry) => !current.split('\n').some((line) => line.trim() === entry),
+  );
+  if (missing.length === 0) return;
+  const suffix = current.endsWith('\n') ? '' : '\n';
+  await fs.appendFile(
+    gitignorePath,
+    `${suffix}\n# DevOrchestrator runtime\n${missing.join('\n')}\n`,
+  );
+}
 
 export default defineCommand({
   meta: {
     name: 'init',
-    description: 'Initializes .ai/ directory in the current project',
+    description: 'Initialize the .ai/ directory in the current project',
   },
-  args: {},
+  args: {
+    force: {
+      type: 'boolean',
+      description: 'Overwrite stub documentation if it already exists',
+      default: false,
+    },
+  },
   async run({ args }) {
-    p.intro(pc.blue('DevOrchestrator Init'));
+    p.intro(pc.bgCyan(pc.black(' DevOrchestrator ')));
     try {
       const s = p.spinner();
       s.start('Detecting workspace root');
-      const cwd = process.cwd();
-      const projectRoot = await WorkspaceManager.findProjectRoot(cwd);
-      s.stop(`Workspace root found at ${projectRoot}`);
+      const projectRoot = await WorkspaceManager.findProjectRoot(process.cwd());
+      s.stop(`Workspace root: ${projectRoot}`);
 
       const aiDir = path.join(projectRoot, '.ai');
-      
-      const exists = await pathExists(aiDir);
-      if (exists) {
-        p.log.warn('.ai directory already exists in this project.');
-      } else {
-        s.start('Detecting project stack');
-        const pm = await detectPackageManager(projectRoot);
-        const langs = await detectLanguages(projectRoot);
-        const frameworks = await detectFrameworks(projectRoot);
-        const pkgInfo = await readPackageInfo(projectRoot);
-        s.stop('Stack detected');
+      const alreadyExists = await pathExists(aiDir);
 
-        const projectName = pkgInfo?.name || path.basename(projectRoot);
-        const scripts = pkgInfo?.scripts ? Object.keys(pkgInfo.scripts).map(k => `${pm} run ${k}`).join('\n') : `${pm} test\n${pm} run build`;
+      s.start('Detecting project stack');
+      const projectType = await detectProjectType(projectRoot);
+      const pm = await detectPackageManager(projectRoot);
+      const langs = await detectLanguages(projectRoot);
+      const frameworks = await detectFrameworks(projectRoot);
+      const pkgInfo = await readPackageInfo(projectRoot);
+      s.stop(
+        `Detected ${projectType} / ${langs.join(', ') || 'unknown'} / ${frameworks.join(', ') || 'none'}`,
+      );
 
-        await ensureDirectory(path.join(aiDir, 'plans'));
-        await ensureDirectory(path.join(aiDir, 'tasks'));
-        await ensureDirectory(path.join(aiDir, 'skills'));
-        await ensureDirectory(path.join(aiDir, 'state'));
-        await ensureDirectory(path.join(aiDir, 'runs'));
-        
-        let projectMd = `# Project: ${projectName}\n\n## Purpose\n(Describe the purpose of this project)\n\n## Stack\n- Languages: ${langs.join(', ') || 'Unknown'}\n- Frameworks: ${frameworks.join(', ') || 'None detected'}\n- Package Manager: ${pm}\n\n## Architecture\nSee ARCHITECTURE.md for system details.\n\n## Development Commands\n\`\`\`bash\n${scripts}\n\`\`\`\n\n## Constraints\n(List important constraints)\n`;
-        let archMd = `# Architecture\n\n## System Overview\n(Describe the overall system architecture)\n\n## Major Components\n(List and describe major components)\n\n## Data Flow\n(Describe how data flows through the system)\n\n## External Services\n(List external services and integrations)\n`;
-        const convMd = `# Conventions\n\n## Coding Style\n(Describe coding conventions)\n\n## Naming\n(Describe naming conventions)\n\n## Testing\n(Describe testing conventions)\n\n## Architecture Rules\n(Describe architecture rules)\n`;
+      await ensureDirectory(path.join(aiDir, 'plans'));
+      await ensureDirectory(path.join(aiDir, 'tasks'));
+      await ensureDirectory(path.join(aiDir, 'skills'));
+      await ensureDirectory(path.join(aiDir, 'state'));
+      await ensureDirectory(path.join(aiDir, 'runs'));
 
-        // Attempt to auto-generate if API keys are available
+      const projectName = pkgInfo?.name || path.basename(projectRoot);
+      const scriptLines = pkgInfo?.scripts
+        ? Object.keys(pkgInfo.scripts)
+            .map((key) => `${pm === 'unknown' ? 'npm' : pm} ${key}`)
+            .join('\n')
+        : `${pm} test\n${pm} build`;
+
+      let projectMd = `# Project: ${projectName}
+
+## Purpose
+(Describe the purpose of this project)
+
+## Stack
+- Languages: ${langs.join(', ') || 'Unknown'}
+- Frameworks: ${frameworks.join(', ') || 'None detected'}
+- Package Manager: ${pm}
+- Project type: ${projectType}
+
+## Architecture
+See ARCHITECTURE.md for system details.
+
+## Development Commands
+\`\`\`bash
+${scriptLines}
+\`\`\`
+
+## Constraints
+(List important constraints)
+`;
+      let archMd = `# Architecture
+
+## System Overview
+(Describe the overall system architecture)
+
+## Major Components
+(List and describe major components)
+
+## Data Flow
+(Describe how data flows through the system)
+
+## External Services
+(List external services and integrations)
+`;
+      const convMd = `# Conventions
+
+## Coding Style
+(Describe coding conventions)
+
+## Naming
+(Describe naming conventions)
+
+## Testing
+(Describe testing conventions)
+
+## Architecture Rules
+(Describe architecture rules)
+`;
+
+      if (
+        process.env.OPENAI_API_KEY ||
+        process.env.ANTHROPIC_API_KEY ||
+        process.env.GOOGLE_API_KEY
+      ) {
         try {
+          s.start('Analyzing workspace to generate documentation...');
           const { loadConfig } = await import('../config/loader.js');
           const { ModelOrchestrator } = await import('../providers/orchestrator.js');
           const config = await loadConfig(projectRoot);
-          
-          if (process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY) {
-            s.start('Analyzing workspace to generate documentation...');
-            const orchestrator = new ModelOrchestrator(config);
-            const prompt = `You are an expert software architect analyzing a new project. 
-Stack: ${langs.join(', ')} / ${frameworks.join(', ')} / ${pm}. 
-Generate two markdown sections separated by "---SPLIT---". 
-First section is PROJECT.md containing Purpose, Stack, Development Commands, and Constraints.
-Second section is ARCHITECTURE.md containing System Overview, Major Components, and Data Flow.
-Keep it concise and infer what you can from standard conventions for this stack.`;
-            
-            const response = await orchestrator.generate('planner', {
-              systemPrompt: 'You generate accurate project documentation.',
-              messages: [{ role: 'user', content: prompt }]
-            });
-            
-            const parts = response.content.split('---SPLIT---');
-            if (parts.length === 2) {
-              projectMd = parts[0].trim();
-              archMd = parts[1].trim();
-            }
-            s.stop('Generated project documentation');
+          const orchestrator = new ModelOrchestrator(config);
+          const response = await orchestrator.generate('planner', {
+            systemPrompt: 'You generate accurate, concise project documentation in Markdown.',
+            messages: [
+              {
+                role: 'user',
+                content: `Analyze this project and generate two markdown documents separated by "---SPLIT---".
+Stack: ${langs.join(', ')} / ${frameworks.join(', ')} / ${pm}.
+First document: PROJECT.md with Purpose, Stack, Development Commands, and Constraints.
+Second document: ARCHITECTURE.md with System Overview, Major Components, and Data Flow.`,
+              },
+            ],
+          });
+          const parts = response.content.split('---SPLIT---');
+          if (parts.length >= 2) {
+            projectMd = parts[0].trim() + '\n';
+            archMd = parts[1].trim() + '\n';
           }
-        } catch (error) {
-          s.stop('Skipped auto-generation (no API key or error)');
-          // fallback to stubs
+          s.stop('Generated project documentation');
+        } catch {
+          s.stop('Skipped auto-generation (no usable API key)');
         }
-
-        await writeFile(path.join(aiDir, 'PROJECT.md'), projectMd);
-        await writeFile(path.join(aiDir, 'ARCHITECTURE.md'), archMd);
-        await writeFile(path.join(aiDir, 'CONVENTIONS.md'), convMd);
-        
-        await writeFile(path.join(aiDir, '.devai.json'), JSON.stringify({}, null, 2));
-        
-        p.log.success('Initialized .ai/ directory structure successfully.');
       }
-    } catch (e: any) {
-      p.log.error(`Initialization failed: ${e.message}`);
+
+      const writeDoc = async (relative: string, content: string) => {
+        const fullPath = path.join(aiDir, relative);
+        if (args.force) {
+          await writeFile(fullPath, content);
+          return true;
+        }
+        return writeIfMissing(fullPath, content);
+      };
+
+      await writeDoc('PROJECT.md', projectMd);
+      await writeDoc('ARCHITECTURE.md', archMd);
+      await writeDoc('CONVENTIONS.md', convMd);
+
+      const defaultConfig = {
+        planner: { provider: 'openai', model: 'gpt-4o' },
+        executor: { agent: 'codex' },
+        reviewer: { provider: 'openai', model: 'gpt-4o' },
+        validation: { commands: defaultValidationCommands(pm, pkgInfo?.scripts) },
+        limits: { maxIterations: 3, maxContextFiles: 30 },
+        security: { commandPolicies: {} },
+      };
+      await writeDoc('.devai.json', JSON.stringify(defaultConfig, null, 2) + '\n');
+      await writeIfMissing(path.join(aiDir, '.gitignore'), 'state/\nruns/\n');
+
+      await writeIfMissing(
+        path.join(aiDir, 'skills', 'testing', 'SKILL.md'),
+        skillMarkdown(
+          'testing',
+          'How to write and run tests for this project.',
+          'When adding features, fixing bugs, or changing behavior that needs verification.',
+        ),
+      );
+
+      if (langs.includes('typescript') || langs.includes('javascript')) {
+        await writeIfMissing(
+          path.join(aiDir, 'skills', 'typescript', 'SKILL.md'),
+          skillMarkdown(
+            'typescript',
+            'TypeScript/JavaScript conventions for this repository.',
+            'When editing application source, types, or module boundaries.',
+          ),
+        );
+      }
+
+      await ensureGitignore(projectRoot);
+
+      if (alreadyExists && !args.force) {
+        p.log.info('Ensured .ai/ structure exists. Pass --force to regenerate stub docs.');
+      } else {
+        p.log.success('Initialized .ai/ directory.');
+      }
+
+      p.log.info(`Config: ${path.join(aiDir, '.devai.json')}`);
+      p.log.info('Next: `devorch plan "your request"`');
+    } catch (error) {
+      fail(error);
     }
     p.outro('Done');
-  }
+  },
 });
