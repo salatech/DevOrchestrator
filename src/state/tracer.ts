@@ -1,7 +1,8 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import type { ExecutionTrace } from './types.js';
-import { fileExists } from '../workspace/filesystem.js';
+import { fileExists, pathExists } from '../workspace/filesystem.js';
+import { redactSecrets } from '../logging/redact.js';
 
 export class ExecutionTracer {
   private runsDir: string;
@@ -12,17 +13,21 @@ export class ExecutionTracer {
 
   async save(trace: ExecutionTrace): Promise<string> {
     await fs.mkdir(this.runsDir, { recursive: true });
-    const id = trace.id || await this.getNextId();
+    const id = trace.id || (await this.getNextId());
     trace.id = id;
     const filename = `${id}.json`;
-    await fs.writeFile(path.join(this.runsDir, filename), JSON.stringify(trace, null, 2), 'utf8');
+    await fs.writeFile(
+      path.join(this.runsDir, filename),
+      redactSecrets(JSON.stringify(trace, null, 2)),
+      'utf8',
+    );
     return id;
   }
 
   async load(id: string): Promise<ExecutionTrace> {
     const filename = `${id}.json`;
     const fullPath = path.join(this.runsDir, filename);
-    if (!await fileExists(fullPath)) {
+    if (!(await fileExists(fullPath))) {
       throw new Error(`Trace not found: ${id}`);
     }
     const content = await fs.readFile(fullPath, 'utf8');
@@ -30,11 +35,11 @@ export class ExecutionTracer {
   }
 
   async list(): Promise<{ id: string; planId: string; status: string; startedAt: string }[]> {
-    if (!await fileExists(this.runsDir)) return [];
-    
+    if (!(await pathExists(this.runsDir))) return [];
+
     const entries = await fs.readdir(this.runsDir);
     const list = [];
-    
+
     for (const entry of entries) {
       if (entry.endsWith('.json')) {
         const trace = await this.load(entry.replace('.json', ''));
@@ -42,7 +47,7 @@ export class ExecutionTracer {
           id: trace.id,
           planId: trace.planId,
           status: trace.status,
-          startedAt: trace.startedAt
+          startedAt: trace.startedAt,
         });
       }
     }
@@ -50,7 +55,7 @@ export class ExecutionTracer {
   }
 
   async getNextId(): Promise<string> {
-    if (!await fileExists(this.runsDir)) return 'RUN-001';
+    if (!(await pathExists(this.runsDir))) return 'RUN-001';
     const entries = await fs.readdir(this.runsDir);
     let maxId = 0;
     for (const entry of entries) {
