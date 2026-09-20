@@ -55,6 +55,20 @@ export interface CollectedContext {
   packageInfo: PackageInfo | null;
 }
 
+/** A classified file that was not sent to the model */
+export interface ExcludedFile {
+  path: string;
+  reason: string;
+}
+
+/** Inspection of context selection for `devorch context` */
+export interface ContextInspection {
+  included: FileContext[];
+  excluded: ExcludedFile[];
+  skills: SkillContext[];
+  docs: { path: string; loaded: boolean }[];
+}
+
 /** Options for context building */
 export interface ContextOptions {
   /** Maximum number of files to include */
