@@ -47,7 +47,11 @@ export const DEFAULT_APPROVAL_PATTERNS: PolicyRule[] = [
   { pattern: 'git stash', policy: 'requires_approval', reason: 'Stashing changes' },
   { pattern: 'pip install', policy: 'requires_approval', reason: 'Installing Python packages' },
   { pattern: 'cargo install', policy: 'requires_approval', reason: 'Installing Rust crate' },
-  { pattern: 'npx prisma migrate', policy: 'requires_approval', reason: 'Running database migration' },
+  {
+    pattern: 'npx prisma migrate',
+    policy: 'requires_approval',
+    reason: 'Running database migration',
+  },
   { pattern: 'npx prisma db push', policy: 'requires_approval', reason: 'Pushing database schema' },
 ];
 
@@ -65,6 +69,12 @@ export const DEFAULT_BLOCKED_PATTERNS: PolicyRule[] = [
   { pattern: 'curl | bash', policy: 'blocked', reason: 'Piping remote script to shell' },
   { pattern: 'wget | sh', policy: 'blocked', reason: 'Piping remote script to shell' },
   { pattern: 'git push --force', policy: 'blocked', reason: 'Force pushing' },
+  { pattern: 'git push -f', policy: 'blocked', reason: 'Force pushing' },
+  { pattern: 'git reset --hard', policy: 'blocked', reason: 'Destructive git reset' },
+  { pattern: 'git clean -fd', policy: 'blocked', reason: 'Destructive git clean' },
+  { pattern: 'git clean -xfd', policy: 'blocked', reason: 'Destructive git clean' },
+  { pattern: 'sudo', policy: 'blocked', reason: 'Privilege escalation' },
+  { pattern: 'chmod -R 777', policy: 'blocked', reason: 'Unsafe permissions' },
   { pattern: 'DROP TABLE', policy: 'blocked', reason: 'Destructive SQL' },
   { pattern: 'DROP DATABASE', policy: 'blocked', reason: 'Destructive SQL' },
   { pattern: 'DELETE FROM', policy: 'blocked', reason: 'Destructive SQL' },

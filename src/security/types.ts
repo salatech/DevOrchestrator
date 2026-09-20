@@ -21,6 +21,8 @@ export interface CommandRequest {
   timeoutMs?: number;
   /** Environment variables */
   env?: Record<string, string>;
+  /** Optional workspace root used to reject path-escaping arguments */
+  allowedRoot?: string;
 }
 
 /** Result of command execution */
