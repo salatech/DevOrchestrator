@@ -1,13 +1,6 @@
 /** Detected project type */
 export type ProjectType =
-  | 'nodejs'
-  | 'python'
-  | 'rust'
-  | 'go'
-  | 'java'
-  | 'dotnet'
-  | 'ruby'
-  | 'unknown';
+  'nodejs' | 'python' | 'rust' | 'go' | 'java' | 'dotnet' | 'ruby' | 'unknown';
 
 /** Detected package manager */
 export type PackageManager =
@@ -25,15 +18,7 @@ export type PackageManager =
 
 /** Detected programming language */
 export type Language =
-  | 'typescript'
-  | 'javascript'
-  | 'python'
-  | 'rust'
-  | 'go'
-  | 'java'
-  | 'csharp'
-  | 'ruby'
-  | 'unknown';
+  'typescript' | 'javascript' | 'python' | 'rust' | 'go' | 'java' | 'csharp' | 'ruby' | 'unknown';
 
 /** Detected framework */
 export type Framework =
@@ -87,6 +72,7 @@ export interface GitState {
   modifiedFiles: string[];
   stagedFiles: string[];
   untrackedFiles: string[];
+  deletedFiles: string[];
   recentCommits: CommitInfo[];
 }
 
@@ -96,6 +82,7 @@ export interface WorkspaceSnapshot {
   head: string;
   modifiedFiles: string[];
   untrackedFiles: string[];
+  deletedFiles: string[];
   timestamp: string;
 }
 

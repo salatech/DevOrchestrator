@@ -11,15 +11,23 @@ import { WorkspaceError } from '../errors/index.js';
 export async function detectProjectType(root: string): Promise<ProjectType> {
   if (await fileExists(path.join(root, 'package.json'))) return 'nodejs';
   if (await fileExists(path.join(root, 'Cargo.toml'))) return 'rust';
-  if (await fileExists(path.join(root, 'pyproject.toml')) || await fileExists(path.join(root, 'requirements.txt'))) return 'python';
+  if (
+    (await fileExists(path.join(root, 'pyproject.toml'))) ||
+    (await fileExists(path.join(root, 'requirements.txt')))
+  )
+    return 'python';
   if (await fileExists(path.join(root, 'go.mod'))) return 'go';
-  if (await fileExists(path.join(root, 'pom.xml')) || await fileExists(path.join(root, 'build.gradle'))) return 'java';
+  if (
+    (await fileExists(path.join(root, 'pom.xml'))) ||
+    (await fileExists(path.join(root, 'build.gradle')))
+  )
+    return 'java';
   if (await fileExists(path.join(root, 'Gemfile'))) return 'ruby';
-  
+
   try {
     const fs = await import('node:fs/promises');
     const files = await fs.readdir(root);
-    if (files.some(f => f.endsWith('.csproj'))) return 'dotnet';
+    if (files.some((f) => f.endsWith('.csproj'))) return 'dotnet';
   } catch {}
 
   return 'unknown';
@@ -33,12 +41,16 @@ export async function detectProjectType(root: string): Promise<ProjectType> {
 export async function detectPackageManager(root: string): Promise<PackageManager> {
   if (await fileExists(path.join(root, 'pnpm-lock.yaml'))) return 'pnpm';
   if (await fileExists(path.join(root, 'yarn.lock'))) return 'yarn';
-  if (await fileExists(path.join(root, 'bun.lock')) || await fileExists(path.join(root, 'bun.lockb'))) return 'bun';
+  if (
+    (await fileExists(path.join(root, 'bun.lock'))) ||
+    (await fileExists(path.join(root, 'bun.lockb')))
+  )
+    return 'bun';
   if (await fileExists(path.join(root, 'package-lock.json'))) return 'npm';
   if (await fileExists(path.join(root, 'Cargo.lock'))) return 'cargo';
   if (await fileExists(path.join(root, 'poetry.lock'))) return 'pip';
   if (await fileExists(path.join(root, 'go.sum'))) return 'go';
-  
+
   return 'unknown';
 }
 
@@ -49,13 +61,17 @@ export async function detectPackageManager(root: string): Promise<PackageManager
  */
 export async function detectLanguages(root: string): Promise<Language[]> {
   const languages: Language[] = [];
-  
+
   if (await fileExists(path.join(root, 'tsconfig.json'))) languages.push('typescript');
   if (await fileExists(path.join(root, 'package.json'))) languages.push('javascript');
-  if (await fileExists(path.join(root, 'pyproject.toml')) || await fileExists(path.join(root, 'requirements.txt'))) languages.push('python');
+  if (
+    (await fileExists(path.join(root, 'pyproject.toml'))) ||
+    (await fileExists(path.join(root, 'requirements.txt')))
+  )
+    languages.push('python');
   if (await fileExists(path.join(root, 'Cargo.toml'))) languages.push('rust');
   if (await fileExists(path.join(root, 'go.mod'))) languages.push('go');
-  
+
   return languages;
 }
 
@@ -66,21 +82,21 @@ export async function detectLanguages(root: string): Promise<Language[]> {
  */
 export async function detectFrameworks(root: string): Promise<Framework[]> {
   const frameworks: Set<Framework> = new Set();
-  
+
   try {
     const fs = await import('node:fs/promises');
     const files = await fs.readdir(root);
-    
+
     // Check config files
-    if (files.some(f => f.startsWith('next.config.'))) frameworks.add('nextjs');
-    if (files.some(f => f.startsWith('nuxt.config.'))) frameworks.add('nuxt');
-    if (files.some(f => f.startsWith('svelte.config.'))) frameworks.add('sveltekit');
-    
+    if (files.some((f) => f.startsWith('next.config.'))) frameworks.add('nextjs');
+    if (files.some((f) => f.startsWith('nuxt.config.'))) frameworks.add('nuxt');
+    if (files.some((f) => f.startsWith('svelte.config.'))) frameworks.add('sveltekit');
+
     // Check package.json dependencies
     const packageInfo = await readPackageInfo(root);
     if (packageInfo) {
       const deps = { ...packageInfo.dependencies, ...packageInfo.devDependencies };
-      
+
       if (deps['next']) frameworks.add('nextjs');
       if (deps['react'] && !frameworks.has('nextjs')) frameworks.add('react');
       if (deps['vue']) frameworks.add('vue');
@@ -92,9 +108,14 @@ export async function detectFrameworks(root: string): Promise<Framework[]> {
       if (deps['@nestjs/core']) frameworks.add('nestjs');
     }
 
-    if (files.some(f => f.startsWith('vite.config.'))) {
+    if (files.some((f) => f.startsWith('vite.config.'))) {
       // Very basic check without parsing the actual vite config file
-      const viteConfig = await readFile(path.join(root, files.find(f => f.startsWith('vite.config.'))!)).catch(() => '');
+      const viteConfig = await readFile(
+        path.join(
+          root,
+          files.find((f) => f.startsWith('vite.config.'))!,
+        ),
+      ).catch(() => '');
       if (viteConfig.includes('@vitejs/plugin-react')) frameworks.add('react');
     }
   } catch (error) {
@@ -109,7 +130,7 @@ export async function detectFrameworks(root: string): Promise<Framework[]> {
   } catch (error) {
     // Ignore errors
   }
-  
+
   return Array.from(frameworks);
 }
 

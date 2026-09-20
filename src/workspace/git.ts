@@ -16,8 +16,8 @@ export class GitManager {
     this.git = simpleGit(root);
   }
 
-  /** 
-   * Check if current directory is a git repo 
+  /**
+   * Check if current directory is a git repo
    * @returns true if the directory is a git repository
    */
   async isGitRepo(): Promise<boolean> {
@@ -28,20 +28,21 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get comprehensive git state 
+  /**
+   * Get comprehensive git state
    * @returns GitState object containing current git state
    */
   async getState(): Promise<GitState> {
     try {
-      const [isRepo, branch, head, modifiedFiles, stagedFiles, untrackedFiles] = await Promise.all([
-        this.isGitRepo(),
-        this.getBranch().catch(() => ''),
-        this.getHead().catch(() => ''),
-        this.getModifiedFiles().catch(() => []),
-        this.getStagedFiles().catch(() => []),
-        this.getUntrackedFiles().catch(() => [])
-      ]);
+      const [branch, head, modifiedFiles, stagedFiles, untrackedFiles, deletedFiles] =
+        await Promise.all([
+          this.getBranch().catch(() => ''),
+          this.getHead().catch(() => ''),
+          this.getModifiedFiles().catch(() => []),
+          this.getStagedFiles().catch(() => []),
+          this.getUntrackedFiles().catch(() => []),
+          this.getDeletedFiles().catch(() => []),
+        ]);
 
       return {
         branch,
@@ -49,7 +50,12 @@ export class GitManager {
         modifiedFiles,
         stagedFiles,
         untrackedFiles,
-        isDirty: modifiedFiles.length > 0 || stagedFiles.length > 0 || untrackedFiles.length > 0,
+        deletedFiles,
+        isDirty:
+          modifiedFiles.length > 0 ||
+          stagedFiles.length > 0 ||
+          untrackedFiles.length > 0 ||
+          deletedFiles.length > 0,
         recentCommits: await this.getLog(5).catch(() => []),
       };
     } catch (error: any) {
@@ -57,8 +63,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get current branch name 
+  /**
+   * Get current branch name
    * @returns Current branch name
    */
   async getBranch(): Promise<string> {
@@ -70,8 +76,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get HEAD commit hash 
+  /**
+   * Get HEAD commit hash
    * @returns HEAD commit hash
    */
   async getHead(): Promise<string> {
@@ -83,8 +89,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get git diff output 
+  /**
+   * Get git diff output
    * @param staged true to get staged diff, false for unstaged
    * @returns Diff output string
    */
@@ -96,8 +102,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get diff statistics 
+  /**
+   * Get diff statistics
    * @returns Object containing diff statistics
    */
   async getDiffStats(): Promise<{ filesChanged: number; insertions: number; deletions: number }> {
@@ -106,34 +112,34 @@ export class GitManager {
       return {
         filesChanged: diffSummary.changed,
         insertions: diffSummary.insertions,
-        deletions: diffSummary.deletions
+        deletions: diffSummary.deletions,
       };
     } catch (error: any) {
       throw new WorkspaceError(`Failed to get diff stats: ${error.message}`);
     }
   }
 
-  /** 
-   * Get recent commit log 
+  /**
+   * Get recent commit log
    * @param limit Number of commits to retrieve (default: 10)
    * @returns Array of CommitInfo objects
    */
   async getLog(limit: number = 10): Promise<CommitInfo[]> {
     try {
       const log = await this.git.log({ maxCount: limit });
-      return log.all.map(commit => ({
+      return log.all.map((commit) => ({
         hash: commit.hash,
         author: commit.author_name,
         message: commit.message,
-        date: commit.date
+        date: commit.date,
       }));
     } catch (error: any) {
       throw new WorkspaceError(`Failed to get commit log: ${error.message}`);
     }
   }
 
-  /** 
-   * Get list of modified files 
+  /**
+   * Get list of modified files
    * @returns Array of modified file paths
    */
   async getModifiedFiles(): Promise<string[]> {
@@ -145,8 +151,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get list of staged files 
+  /**
+   * Get list of staged files
    * @returns Array of staged file paths
    */
   async getStagedFiles(): Promise<string[]> {
@@ -158,8 +164,8 @@ export class GitManager {
     }
   }
 
-  /** 
-   * Get list of untracked files 
+  /**
+   * Get list of untracked files
    * @returns Array of untracked file paths
    */
   async getUntrackedFiles(): Promise<string[]> {
@@ -168,6 +174,18 @@ export class GitManager {
       return status.not_added;
     } catch (error: any) {
       throw new WorkspaceError(`Failed to get untracked files: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get list of deleted files
+   */
+  async getDeletedFiles(): Promise<string[]> {
+    try {
+      const status = await this.git.status();
+      return status.deleted;
+    } catch (error: any) {
+      throw new WorkspaceError(`Failed to get deleted files: ${error.message}`);
     }
   }
 }

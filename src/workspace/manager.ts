@@ -2,7 +2,13 @@ import * as path from 'node:path';
 import type { WorkspaceInfo, GitState, WorkspaceSnapshot, PackageInfo } from './types.js';
 import * as filesystem from './filesystem.js';
 import { GitManager } from './git.js';
-import { detectProjectType, detectPackageManager, detectLanguages, detectFrameworks, readPackageInfo } from './detector.js';
+import {
+  detectProjectType,
+  detectPackageManager,
+  detectLanguages,
+  detectFrameworks,
+  readPackageInfo,
+} from './detector.js';
 import { WorkspaceError } from '../errors/index.js';
 
 /**
@@ -31,27 +37,27 @@ export class WorkspaceManager {
     while (currentDir !== root) {
       const gitExists = await filesystem.pathExists(path.join(currentDir, '.git'));
       const pkgExists = await filesystem.fileExists(path.join(currentDir, 'package.json'));
-      
+
       if (gitExists || pkgExists) {
         return currentDir;
       }
       currentDir = path.dirname(currentDir);
     }
-    
+
     // Fallback to startDir if no root markers found
     return path.resolve(startDir);
   }
 
-  /** 
-   * Get the workspace root path 
+  /**
+   * Get the workspace root path
    * @returns Absolute path to workspace root
    */
   getRoot(): string {
     return this.root;
   }
 
-  /** 
-   * Inspect the workspace and return comprehensive info 
+  /**
+   * Inspect the workspace and return comprehensive info
    * @returns Comprehensive workspace information
    */
   async inspect(): Promise<WorkspaceInfo> {
@@ -61,7 +67,7 @@ export class WorkspaceManager {
         detectPackageManager(this.root),
         detectLanguages(this.root),
         detectFrameworks(this.root),
-        readPackageInfo(this.root)
+        readPackageInfo(this.root),
       ]);
 
       return {
@@ -71,23 +77,23 @@ export class WorkspaceManager {
         languages,
         frameworks,
         hasGit: await this.gitManager.isGitRepo(),
-        hasAIDir: await this.fileExists('.ai'),
+        hasAIDir: await filesystem.pathExists(path.join(this.root, '.ai')),
       };
     } catch (error: any) {
       throw new WorkspaceError(`Failed to inspect workspace: ${error.message}`);
     }
   }
 
-  /** 
-   * Get current git state 
+  /**
+   * Get current git state
    * @returns Current git state
    */
   async getGitState(): Promise<GitState> {
     return this.gitManager.getState();
   }
 
-  /** 
-   * Create a workspace snapshot 
+  /**
+   * Create a workspace snapshot
    * @returns Snapshot of the workspace
    */
   async snapshot(): Promise<WorkspaceSnapshot> {
@@ -99,14 +105,15 @@ export class WorkspaceManager {
         head: gitState.head,
         modifiedFiles: gitState.modifiedFiles,
         untrackedFiles: gitState.untrackedFiles,
+        deletedFiles: gitState.deletedFiles,
       };
     } catch (error: any) {
       throw new WorkspaceError(`Failed to create workspace snapshot: ${error.message}`);
     }
   }
 
-  /** 
-   * Read a file relative to workspace root 
+  /**
+   * Read a file relative to workspace root
    * @param relativePath Path relative to root
    * @returns File content as string
    */
@@ -115,8 +122,8 @@ export class WorkspaceManager {
     return filesystem.readFile(safePath);
   }
 
-  /** 
-   * Write a file relative to workspace root 
+  /**
+   * Write a file relative to workspace root
    * @param relativePath Path relative to root
    * @param content Content to write
    */
@@ -125,8 +132,16 @@ export class WorkspaceManager {
     return filesystem.writeFile(safePath, content);
   }
 
-  /** 
-   * Check if a file exists relative to workspace root 
+  /**
+   * Delete a file relative to workspace root
+   */
+  async deleteFile(relativePath: string): Promise<void> {
+    const safePath = filesystem.enforceSafePath(this.root, relativePath);
+    return filesystem.deleteFile(safePath);
+  }
+
+  /**
+   * Check if a file exists relative to workspace root
    * @param relativePath Path relative to root
    * @returns true if file exists
    */
@@ -135,24 +150,24 @@ export class WorkspaceManager {
     return filesystem.fileExists(safePath);
   }
 
-  /** 
-   * List all source files in the workspace 
+  /**
+   * List all source files in the workspace
    * @returns Array of relative file paths
    */
   async listSourceFiles(): Promise<string[]> {
     return filesystem.listFiles(this.root);
   }
 
-  /** 
-   * Get package info 
+  /**
+   * Get package info
    * @returns Parsed package info or null
    */
   async getPackageInfo(): Promise<PackageInfo | null> {
     return readPackageInfo(this.root);
   }
 
-  /** 
-   * Get git diff 
+  /**
+   * Get git diff
    * @param staged true to get staged diff, false for unstaged
    * @returns Diff output string
    */
@@ -160,8 +175,8 @@ export class WorkspaceManager {
     return this.gitManager.getDiff(staged);
   }
 
-  /** 
-   * Get diff statistics 
+  /**
+   * Get diff statistics
    * @returns Object containing diff statistics
    */
   async getDiffStats(): Promise<{ filesChanged: number; insertions: number; deletions: number }> {
