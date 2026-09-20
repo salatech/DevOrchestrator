@@ -27,7 +27,7 @@ export class CLIExecutorAgent implements ExecutorAgent {
    */
   async execute(task: AgentTask): Promise<AgentResult> {
     const instruction = this.buildInstruction(task);
-    
+
     try {
       let command: string;
       let args: string[];
@@ -39,7 +39,7 @@ export class CLIExecutorAgent implements ExecutorAgent {
         command = 'claude';
         args = ['--json', '--prompt', instruction];
       }
-      
+
       const { stdout, stderr, exitCode } = await execa(command, args, {
         cwd: this.workspaceRoot,
         timeout: 5 * 60 * 1000, // 5 minutes
@@ -56,15 +56,22 @@ export class CLIExecutorAgent implements ExecutorAgent {
         // Output might not be valid JSON
       }
 
-      // Check modified files
-      const gitDiff = await execa('git', ['diff', '--name-only'], { cwd: this.workspaceRoot });
+      const gitDiff = await execa('git', ['diff', '--name-only'], {
+        cwd: this.workspaceRoot,
+        reject: false,
+      });
+      const untracked = await execa('git', ['ls-files', '--others', '--exclude-standard'], {
+        cwd: this.workspaceRoot,
+        reject: false,
+      });
       const modifiedFiles = gitDiff.stdout.split('\n').filter(Boolean);
+      const filesCreated = untracked.stdout.split('\n').filter(Boolean);
 
       return {
         status: exitCode === 0 ? 'success' : 'failure',
         summary: output || stderr || 'Executed.',
         filesModified: modifiedFiles,
-        filesCreated: [],
+        filesCreated,
         filesDeleted: [],
         commandsExecuted: [],
         errors: exitCode !== 0 ? [stderr || 'Command failed'] : [],
@@ -78,10 +85,7 @@ export class CLIExecutorAgent implements ExecutorAgent {
   }
 
   private buildInstruction(task: AgentTask): string {
-    const parts = [
-      `Task: ${task.plan.title}`,
-      `Description: ${task.plan.objective}`,
-    ];
+    const parts = [`Task: ${task.plan.title}`, `Description: ${task.plan.objective}`];
 
     if (task.instructions) {
       parts.push(`Instructions:\n${task.instructions}`);

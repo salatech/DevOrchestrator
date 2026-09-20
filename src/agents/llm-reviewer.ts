@@ -9,13 +9,15 @@ import { ExecutionError } from '../errors/index.js';
 const ReviewResultSchema = z.object({
   status: z.enum(['approved', 'changes_requested']),
   summary: z.string(),
-  findings: z.array(z.object({
-    severity: z.enum(['critical', 'high', 'medium', 'low']),
-    file: z.string().optional(),
-    line: z.number().optional(),
-    description: z.string(),
-    recommendation: z.string(),
-  })),
+  findings: z.array(
+    z.object({
+      severity: z.enum(['critical', 'high', 'medium', 'low']),
+      file: z.string().optional(),
+      line: z.number().optional(),
+      description: z.string(),
+      recommendation: z.string(),
+    }),
+  ),
 });
 
 /**
@@ -45,7 +47,7 @@ export class LLMReviewerAgent implements ReviewerAgent {
   ): Promise<ReviewResult> {
     const systemPrompt = this.buildSystemPrompt(context);
     const userMessage = this.buildUserMessage(plan, diff, testResults);
-    
+
     try {
       const { object } = await this.modelOrchestrator.generateStructured(
         'reviewer',
@@ -54,9 +56,9 @@ export class LLMReviewerAgent implements ReviewerAgent {
           messages: [{ role: 'user', content: userMessage }],
           temperature: 0.2,
         },
-        ReviewResultSchema
+        ReviewResultSchema,
       );
-      
+
       return {
         status: object.status,
         summary: object.summary,
@@ -69,7 +71,7 @@ export class LLMReviewerAgent implements ReviewerAgent {
         messages: [{ role: 'user', content: userMessage }],
         temperature: 0.2,
       });
-      
+
       return this.parseReviewFallback(response.content);
     }
   }
@@ -97,7 +99,7 @@ Provide your feedback in a structured format containing:
 ${plan.objective}
 
 ## Acceptance Criteria
-${plan.acceptanceCriteria.map(c => `- ${c}`).join('\n')}
+${plan.acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
 
 ## Code Diff
 \`\`\`diff

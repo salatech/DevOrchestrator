@@ -29,13 +29,13 @@ export class LLMPlannerAgent implements PlannerAgent {
   async createPlan(request: string, context: TaskContext): Promise<Plan> {
     const systemPrompt = this.buildSystemPrompt(context);
     const userMessage = this.buildUserMessage(request, context);
-    
+
     const response = await this.modelOrchestrator.generate('planner', {
       systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
       temperature: 0.3,
     });
-    
+
     return this.parseResponse(response.content, request);
   }
 
@@ -104,7 +104,7 @@ IMPORTANT RULES:
 - Define clear acceptance criteria
 - Do not invent requirements not in the request
 - If the request is ambiguous, note it in the plan rather than guessing`;
-    
+
     if (context.project) {
       prompt += `\n\n## Project Context\n${context.project}`;
     }
@@ -114,18 +114,18 @@ IMPORTANT RULES:
     if (context.conventions) {
       prompt += `\n\n## Conventions\n${context.conventions}`;
     }
-    
+
     return prompt;
   }
 
   private buildUserMessage(request: string, context: TaskContext): string {
     let message = `Create an implementation plan for the following request:\n\n"${request}"\n`;
-    
+
     // Add git state
     message += `\n## Current Git State\n`;
     message += `Branch: ${context.gitState.branch}\n`;
     message += `Modified files: ${context.gitState.modifiedFiles.join(', ') || 'none'}\n`;
-    
+
     // Add relevant files
     if (context.relevantFiles.length > 0) {
       message += `\n## Relevant Source Files\n`;
@@ -133,7 +133,7 @@ IMPORTANT RULES:
         message += `\n### ${file.path}\n\`\`\`\n${file.content}\n\`\`\`\n`;
       }
     }
-    
+
     // Add skills
     if (context.skills.length > 0) {
       message += `\n## Applicable Skills\n`;
@@ -141,14 +141,14 @@ IMPORTANT RULES:
         message += `\n### ${skill.name}\n${skill.content}\n`;
       }
     }
-    
+
     // Add package info
     if (context.packageInfo) {
       message += `\n## Package Info\n`;
       message += `Name: ${context.packageInfo.name}\n`;
       message += `Dependencies: ${Object.keys(context.packageInfo.dependencies).join(', ')}\n`;
     }
-    
+
     return message;
   }
 
@@ -163,12 +163,12 @@ IMPORTANT RULES:
   private parsePlanContent(content: string, request: string): Plan {
     // Simple frontmatter parsing
     const fmMatch = content.match(/^---\r?\n([\s\S]+?)\r?\n---\r?\n([\s\S]*)$/);
-    
+
     const now = new Date().toISOString().split('T')[0];
     let id = 'PLAN-XXX';
     let title = request.substring(0, 80);
     let branch = 'unknown';
-    
+
     if (fmMatch) {
       try {
         const fmContent = fmMatch[1];
@@ -182,16 +182,16 @@ IMPORTANT RULES:
         const titleMatch = fmContent.match(/title:\s*["']?(.+?)["']?\s*$/m);
         const idMatch = fmContent.match(/id:\s*(.+?)\s*$/m);
         const branchMatch = fmContent.match(/branch:\s*(.+?)\s*$/m);
-        
+
         if (titleMatch) title = titleMatch[1];
         if (idMatch) id = idMatch[1];
         if (branchMatch) branch = branchMatch[1];
       }
     }
-    
+
     // Parse sections from body
     const body = fmMatch ? fmMatch[2] : content;
-    
+
     return {
       id,
       title,
@@ -207,7 +207,8 @@ IMPORTANT RULES:
       filesToCreate: this.extractList(body, 'Files To Create'),
       implementationSteps: this.extractSteps(body),
       constraints: this.extractList(body, 'Constraints'),
-      testingStrategy: this.extractSection(body, 'Testing Strategy') || this.extractSection(body, 'Testing'),
+      testingStrategy:
+        this.extractSection(body, 'Testing Strategy') || this.extractSection(body, 'Testing'),
       acceptanceCriteria: this.extractList(body, 'Acceptance Criteria'),
       risks: this.extractList(body, 'Risks'),
       outOfScope: this.extractList(body, 'Out Of Scope'),
@@ -230,10 +231,12 @@ IMPORTANT RULES:
       relevantFiles: [],
       filesToModify: [],
       filesToCreate: [],
-      implementationSteps: [{ number: 1, title: 'Implementation', description: content }],
+      implementationSteps: [
+        { number: 1, title: 'Implementation', description: content || request },
+      ],
       constraints: [],
       testingStrategy: '',
-      acceptanceCriteria: [],
+      acceptanceCriteria: ['The request is implemented', 'Existing tests still pass'],
       risks: [],
       outOfScope: [],
       dependencies: [],
@@ -251,21 +254,24 @@ IMPORTANT RULES:
   private extractList(body: string, heading: string): string[] {
     const section = this.extractSection(body, heading);
     if (!section) return [];
-    return section.split('\n')
-      .map(line => line.replace(/^\s*[-*]\s*/, '').trim())
-      .filter(line => line.length > 0);
+    return section
+      .split('\n')
+      .map((line) => line.replace(/^\s*[-*]\s*/, '').trim())
+      .filter((line) => line.length > 0);
   }
 
   // Helper to extract implementation steps
-  private extractSteps(body: string): { number: number; title: string; description: string; files?: string[] }[] {
+  private extractSteps(
+    body: string,
+  ): { number: number; title: string; description: string; files?: string[] }[] {
     const stepsSection = this.extractSection(body, 'Implementation Steps');
     if (!stepsSection) return [];
-    
+
     const stepRegex = /^##\s+Step\s+(\d+)(?::\s*(.+))?\s*$/gm;
     const steps: { number: number; title: string; description: string }[] = [];
     let match: RegExpExecArray | null;
     const positions: { index: number; number: number; title: string }[] = [];
-    
+
     while ((match = stepRegex.exec(stepsSection)) !== null) {
       positions.push({
         index: match.index + match[0].length,
@@ -273,10 +279,13 @@ IMPORTANT RULES:
         title: match[2]?.trim() || `Step ${match[1]}`,
       });
     }
-    
+
     for (let i = 0; i < positions.length; i++) {
       const start = positions[i].index;
-      const end = i + 1 < positions.length ? positions[i + 1].index - (positions[i + 1].title.length + 20) : stepsSection.length;
+      const end =
+        i + 1 < positions.length
+          ? positions[i + 1].index - (positions[i + 1].title.length + 20)
+          : stepsSection.length;
       const description = stepsSection.substring(start, end).trim();
       steps.push({
         number: positions[i].number,
@@ -284,7 +293,7 @@ IMPORTANT RULES:
         description,
       });
     }
-    
+
     return steps;
   }
 }

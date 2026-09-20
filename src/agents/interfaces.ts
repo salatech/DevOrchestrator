@@ -11,10 +11,7 @@ export interface Agent {
 
 /** Agent that can create implementation plans */
 export interface PlannerAgent extends Agent {
-  createPlan(
-    request: string,
-    context: TaskContext,
-  ): Promise<Plan>;
+  createPlan(request: string, context: TaskContext): Promise<Plan>;
 }
 
 /** Agent that can execute implementation plans */
