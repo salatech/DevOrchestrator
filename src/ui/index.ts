@@ -1,4 +1,11 @@
-export { formatPlan, formatReport, formatReview, formatStatus, formatDuration } from './display.js';
+export {
+  formatPlan,
+  formatReport,
+  formatReview,
+  formatStatus,
+  formatDuration,
+  formatDiff,
+} from './display.js';
 export {
   promptPlanApproval,
   promptConfirm,

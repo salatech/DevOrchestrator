@@ -143,13 +143,16 @@ export function formatReport(report: ExecutionReport): string {
   lines.push('');
 
   lines.push(`Plan:       ${report.planId}`);
-  lines.push(`Status:     ${report.status === 'completed' ? pc.green('completed') : pc.red(report.status)}`);
+  lines.push(
+    `Status:     ${report.status === 'completed' ? pc.green('completed') : pc.red(report.status)}`,
+  );
   lines.push(`Iterations: ${report.iterations}`);
   lines.push(`Duration:   ${formatDuration(report.durationMs)}`);
   lines.push('');
 
   // File changes
-  const totalChanges = report.filesModified.length + report.filesCreated.length + report.filesDeleted.length;
+  const totalChanges =
+    report.filesModified.length + report.filesCreated.length + report.filesDeleted.length;
   if (totalChanges > 0) {
     lines.push(pc.bold('Changes'));
     for (const f of report.filesModified) {
@@ -178,7 +181,9 @@ export function formatReport(report: ExecutionReport): string {
   // Review
   if (report.reviewResult) {
     lines.push(pc.bold('Review'));
-    lines.push(`  Status: ${report.reviewResult.status === 'approved' ? pc.green('approved') : pc.yellow('changes requested')}`);
+    lines.push(
+      `  Status: ${report.reviewResult.status === 'approved' ? pc.green('approved') : pc.yellow('changes requested')}`,
+    );
     if (report.reviewResult.findings.length > 0) {
       for (const f of report.reviewResult.findings) {
         lines.push(`  ${formatFindingSeverity(f.severity)} ${f.description}`);
@@ -201,7 +206,9 @@ export function formatReview(review: ReviewResult): string {
   const lines: string[] = [];
 
   const icon = review.status === 'approved' ? pc.green('✓') : pc.yellow('⚠');
-  lines.push(`${icon} ${pc.bold('Code Review')}: ${review.status === 'approved' ? pc.green('Approved') : pc.yellow('Changes Requested')}`);
+  lines.push(
+    `${icon} ${pc.bold('Code Review')}: ${review.status === 'approved' ? pc.green('Approved') : pc.yellow('Changes Requested')}`,
+  );
   lines.push('');
   lines.push(review.summary);
   lines.push('');
@@ -210,7 +217,9 @@ export function formatReview(review: ReviewResult): string {
     lines.push(pc.bold('Findings'));
     for (const finding of review.findings) {
       const severity = formatFindingSeverity(finding.severity);
-      const location = finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : '';
+      const location = finding.file
+        ? `${finding.file}${finding.line ? `:${finding.line}` : ''}`
+        : '';
       lines.push(`  ${severity} ${finding.description}`);
       if (location) {
         lines.push(`    ${pc.dim(`at ${location}`)}`);
@@ -247,4 +256,25 @@ export function formatDuration(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   const seconds = ((ms % 60_000) / 1000).toFixed(0);
   return `${minutes}m ${seconds}s`;
+}
+
+/**
+ * Colorize a unified git diff for the terminal.
+ */
+export function formatDiff(diff: string): string {
+  if (!diff.trim()) {
+    return pc.dim('No unstaged changes.');
+  }
+
+  return diff
+    .split('\n')
+    .map((line) => {
+      if (line.startsWith('+++') || line.startsWith('---')) return pc.bold(line);
+      if (line.startsWith('+')) return pc.green(line);
+      if (line.startsWith('-')) return pc.red(line);
+      if (line.startsWith('@@')) return pc.cyan(line);
+      if (line.startsWith('diff ')) return pc.bold(line);
+      return line;
+    })
+    .join('\n');
 }
