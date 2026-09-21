@@ -18,6 +18,7 @@ describe('plans/state-machine', () => {
     it('blocks invalid transitions', () => {
       expect(isValidTransition('draft', 'completed')).toBe(false);
       expect(isValidTransition('completed', 'draft')).toBe(false);
+      expect(isValidTransition('completed', 'approved')).toBe(true);
       expect(isValidTransition('cancelled', 'executing')).toBe(false);
     });
   });
@@ -47,8 +48,8 @@ describe('plans/state-machine', () => {
   describe('getValidNextStatuses', () => {
     it('returns correct options for each status', () => {
       expect(getValidNextStatuses('draft')).toEqual(['awaiting_approval']);
-      expect(getValidNextStatuses('completed')).toEqual([]);
-      expect(getValidNextStatuses('failed')).toEqual(['draft']);
+      expect(getValidNextStatuses('completed')).toEqual(['approved']);
+      expect(getValidNextStatuses('failed')).toEqual(['draft', 'approved']);
       expect(getValidNextStatuses('executing')).toEqual([
         'validating',
         'reviewing',

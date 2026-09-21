@@ -17,8 +17,8 @@ const transitions = new Map<PlanStatus, PlanStatus[]>([
     PlanStatus.Reviewing,
     [PlanStatus.Completed, PlanStatus.Executing, PlanStatus.Failed, PlanStatus.Cancelled],
   ],
-  [PlanStatus.Completed, []],
-  [PlanStatus.Failed, [PlanStatus.Draft]],
+  [PlanStatus.Completed, [PlanStatus.Approved]],
+  [PlanStatus.Failed, [PlanStatus.Draft, PlanStatus.Approved]],
   [PlanStatus.Cancelled, []],
 ]);
 
