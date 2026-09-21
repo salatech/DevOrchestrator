@@ -112,14 +112,17 @@ export class Orchestrator {
     // Load plan
     const plan = await this.planManager.loadPlan(planId);
 
-    if (plan.status !== PlanStatus.Approved) {
-      throw new PlanningError(`Plan ${planId} is not approved. Current status: ${plan.status}`, {
-        planId,
-        status: plan.status,
-      });
+    if (plan.status !== PlanStatus.Approved && plan.status !== PlanStatus.Reviewing) {
+      throw new PlanningError(
+        `Plan ${planId} cannot be executed from status: ${plan.status}. Approve it first (or retry from reviewing).`,
+        {
+          planId,
+          status: plan.status,
+        },
+      );
     }
 
-    // Transition to executing
+    // Transition to executing (from approved or reviewing retry)
     await this.planManager.transitionStatus(planId, PlanStatus.Executing);
     this.emit({ stage: 'executing', message: `Executing plan ${planId}...` });
 
@@ -203,7 +206,11 @@ export class Orchestrator {
         this.emit({ stage: 'reviewing', message: 'Reviewing implementation...' });
         await this.planManager.transitionStatus(planId, PlanStatus.Reviewing);
 
-        const diff = await this.workspace.getDiff();
+        const changeView = await this.workspace.buildChangeMaterial({
+          preferredPaths: [...plan.filesToCreate, ...plan.filesToModify],
+          before: snapshotBefore,
+        });
+        const diff = changeView.material;
         const testOutput = validationResult
           ? validationResult.results
               .map((r) => `${r.command}: ${r.passed ? 'PASS' : 'FAIL'}`)
@@ -211,6 +218,28 @@ export class Orchestrator {
           : 'No validation configured';
 
         reviewResult = await this.reviewer.review(plan, diff, testOutput, context);
+
+        const midSnapshot = await this.snapshotManager.capture(this.workspace);
+        const midDiff = this.snapshotManager.compare(snapshotBefore, midSnapshot);
+        const projectChanges = [...midDiff.filesAdded, ...midDiff.filesModified, ...midDiff.filesRemoved].filter(
+          (file) => !file.startsWith('.ai/'),
+        );
+
+        if (reviewResult.status === 'approved' && projectChanges.length === 0) {
+          lastResult =
+            'No project files were created or modified. Implement the plan in the app files (HTML/CSS/JS, etc.), not only under .ai/.';
+          if (iteration >= this.config.limits.maxIterations) {
+            await this.planManager.transitionStatus(planId, PlanStatus.Failed);
+            break;
+          }
+          await this.planManager.transitionStatus(planId, PlanStatus.Executing);
+          this.emit({
+            stage: 'fixing',
+            message: 'Implementation missing — continuing execution...',
+            iteration,
+          });
+          continue;
+        }
 
         if (reviewResult.status === 'approved') {
           await this.planManager.transitionStatus(planId, PlanStatus.Completed);
@@ -256,11 +285,14 @@ export class Orchestrator {
     const snapshotDiff = this.snapshotManager.compare(snapshotBefore, snapshotAfter);
     const diffStats = await this.workspace.getDiffStats();
     const durationMs = Date.now() - startTime;
+    const currentPlan = await this.planManager.loadPlan(planId);
     const finalStatus = abort.interrupted
       ? 'cancelled'
-      : reviewResult?.status === 'approved'
+      : currentPlan.status === PlanStatus.Completed
         ? 'completed'
-        : 'failed';
+        : currentPlan.status === PlanStatus.Cancelled
+          ? 'cancelled'
+          : 'failed';
 
     const report: ExecutionReport = {
       planId,
@@ -275,7 +307,11 @@ export class Orchestrator {
       validationResults: validationResult,
       reviewResult,
       durationMs,
-      error: abort.interrupted ? 'Execution interrupted' : undefined,
+      error: abort.interrupted
+        ? 'Execution interrupted'
+        : finalStatus === 'failed'
+          ? lastResult || 'Execution finished without review approval'
+          : undefined,
     };
 
     const traceId = await this.tracer.getNextId();
@@ -330,8 +366,15 @@ export class Orchestrator {
       this.workspace,
       this.planManager,
     );
-    const diff = await this.workspace.getDiff();
-    const reviewResult = await this.reviewer.review(plan, diff, 'Manual review', context);
+    const changeView = await this.workspace.buildChangeMaterial({
+      preferredPaths: [...plan.filesToCreate, ...plan.filesToModify],
+    });
+    const reviewResult = await this.reviewer.review(
+      plan,
+      changeView.material,
+      'Manual review',
+      context,
+    );
 
     let status = plan.status;
     if (status === PlanStatus.Executing || status === PlanStatus.Validating) {
