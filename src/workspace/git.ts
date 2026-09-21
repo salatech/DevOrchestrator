@@ -2,6 +2,19 @@ import simpleGit, { type SimpleGit } from 'simple-git';
 import type { GitState, CommitInfo } from './types.js';
 import { WorkspaceError } from '../errors/index.js';
 
+function emptyGitState(): GitState {
+  return {
+    branch: '',
+    head: '',
+    isDirty: false,
+    modifiedFiles: [],
+    stagedFiles: [],
+    untrackedFiles: [],
+    deletedFiles: [],
+    recentCommits: [],
+  };
+}
+
 /**
  * GitManager class to handle git operations
  */
@@ -33,6 +46,10 @@ export class GitManager {
    * @returns GitState object containing current git state
    */
   async getState(): Promise<GitState> {
+    if (!(await this.isGitRepo())) {
+      return emptyGitState();
+    }
+
     try {
       const [branch, head, modifiedFiles, stagedFiles, untrackedFiles, deletedFiles] =
         await Promise.all([
@@ -95,6 +112,9 @@ export class GitManager {
    * @returns Diff output string
    */
   async getDiff(staged: boolean = false): Promise<string> {
+    if (!(await this.isGitRepo())) {
+      return '';
+    }
     try {
       return staged ? await this.git.diff(['--staged']) : await this.git.diff();
     } catch (error: any) {
@@ -107,6 +127,9 @@ export class GitManager {
    * @returns Object containing diff statistics
    */
   async getDiffStats(): Promise<{ filesChanged: number; insertions: number; deletions: number }> {
+    if (!(await this.isGitRepo())) {
+      return { filesChanged: 0, insertions: 0, deletions: 0 };
+    }
     try {
       const diffSummary = await this.git.diffSummary();
       return {
