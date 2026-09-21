@@ -1,5 +1,6 @@
 import { defineCommand } from 'citty';
 import * as p from '@clack/prompts';
+import { PlanStatus } from '../plans/types.js';
 import { formatPlan, formatReport } from '../ui/display.js';
 import { promptConfirm, showWarning } from '../ui/prompts.js';
 import { createAgentRuntime } from '../runtime.js';
@@ -28,15 +29,25 @@ export default defineCommand({
       const runtime = await createAgentRuntime();
       for (const warning of runtime.warnings) showWarning(warning);
 
-      const plan = await runtime.planManager.loadPlan(String(args.id));
+      let plan = await runtime.planManager.loadPlan(String(args.id));
       console.log('\n' + formatPlan(plan) + '\n');
 
+      const rerun = plan.status === PlanStatus.Completed || plan.status === PlanStatus.Failed;
       const confirmed =
-        args.yes || (await promptConfirm(`Execute ${plan.id}? This will modify the workspace.`));
+        args.yes ||
+        (await promptConfirm(
+          rerun
+            ? `${plan.id} is ${plan.status}. Run it again? This will modify the workspace.`
+            : `Execute ${plan.id}? This will modify the workspace.`,
+        ));
       if (!confirmed) {
         p.log.warn('Execution cancelled.');
         p.outro('Done');
         return;
+      }
+
+      if (rerun) {
+        plan = await runtime.planManager.transitionStatus(plan.id, PlanStatus.Approved);
       }
 
       runtime.progress.start();
