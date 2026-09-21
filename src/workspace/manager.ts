@@ -10,6 +10,8 @@ import {
   readPackageInfo,
 } from './detector.js';
 import { WorkspaceError } from '../errors/index.js';
+import { buildChangeMaterial } from './changes.js';
+import type { ChangeMaterial } from './changes.js';
 
 /**
  * Main facade for interacting with a workspace
@@ -99,17 +101,58 @@ export class WorkspaceManager {
   async snapshot(): Promise<WorkspaceSnapshot> {
     try {
       const gitState = await this.getGitState();
+      const fileFingerprints = await this.collectFileFingerprints();
+      const fingerprintPaths = Object.keys(fileFingerprints);
+
+      // Without git, treat all fingerprinted files as the local inventory.
+      const untrackedFiles =
+        gitState.untrackedFiles.length > 0
+          ? gitState.untrackedFiles
+          : gitState.branch || gitState.head
+            ? []
+            : fingerprintPaths;
+
       return {
         timestamp: new Date().toISOString(),
         branch: gitState.branch,
         head: gitState.head,
         modifiedFiles: gitState.modifiedFiles,
-        untrackedFiles: gitState.untrackedFiles,
+        untrackedFiles,
         deletedFiles: gitState.deletedFiles,
+        fileFingerprints,
       };
     } catch (error: any) {
       throw new WorkspaceError(`Failed to create workspace snapshot: ${error.message}`);
     }
+  }
+
+  /**
+   * Fingerprint source files for local-first change detection (works without git).
+   */
+  async collectFileFingerprints(): Promise<Record<string, string>> {
+    const files = await this.listSourceFiles();
+    const fingerprints: Record<string, string> = {};
+    for (const relativePath of files) {
+      try {
+        const safePath = filesystem.enforceSafePath(this.root, relativePath);
+        const info = await filesystem.getFileStats(safePath);
+        fingerprints[relativePath] = `${info.size ?? 0}:${info.modifiedAt ?? ''}`;
+      } catch {
+        // Skip unreadable paths
+      }
+    }
+    return fingerprints;
+  }
+
+  /**
+   * Build review/diff material: prefer local file contents, then git diff.
+   */
+  async buildChangeMaterial(options?: {
+    preferredPaths?: string[];
+    before?: WorkspaceSnapshot;
+    after?: WorkspaceSnapshot;
+  }): Promise<ChangeMaterial> {
+    return buildChangeMaterial(this, options);
   }
 
   /**

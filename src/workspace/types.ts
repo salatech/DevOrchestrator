@@ -83,6 +83,8 @@ export interface WorkspaceSnapshot {
   modifiedFiles: string[];
   untrackedFiles: string[];
   deletedFiles: string[];
+  /** Relative path → fingerprint (`size:mtimeMs`) for local-first change detection */
+  fileFingerprints: Record<string, string>;
   timestamp: string;
 }
 
