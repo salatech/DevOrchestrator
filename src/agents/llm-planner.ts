@@ -1,11 +1,9 @@
 import type { PlannerAgent } from './interfaces.js';
 import type { AgentCapabilities } from './types.js';
 import type { Plan } from '../plans/types.js';
-import { PlanStatus } from '../plans/types.js';
 import type { TaskContext } from '../context/types.js';
 import type { ModelOrchestrator } from '../providers/orchestrator.js';
-import { PlanningError } from '../errors/index.js';
-import { parse as parseYaml } from 'yaml';
+import { parseChatPlan } from '../plans/from-chat.js';
 
 /**
  * LLM-based planner agent.
@@ -36,7 +34,7 @@ export class LLMPlannerAgent implements PlannerAgent {
       temperature: 0.3,
     });
 
-    return this.parseResponse(response.content, request);
+    return parseChatPlan(response.content, request, 'llm');
   }
 
   private buildSystemPrompt(context: TaskContext): string {
@@ -150,150 +148,5 @@ IMPORTANT RULES:
     }
 
     return message;
-  }
-
-  private parseResponse(content: string, request: string): Plan {
-    try {
-      return this.parsePlanContent(content, request);
-    } catch {
-      return this.createFallbackPlan(content, request);
-    }
-  }
-
-  private parsePlanContent(content: string, request: string): Plan {
-    // Simple frontmatter parsing
-    const fmMatch = content.match(/^---\r?\n([\s\S]+?)\r?\n---\r?\n([\s\S]*)$/);
-
-    const now = new Date().toISOString().split('T')[0];
-    let id = 'PLAN-XXX';
-    let title = request.substring(0, 80);
-    let branch = 'unknown';
-
-    if (fmMatch) {
-      try {
-        const fmContent = fmMatch[1];
-        const parsedFm = parseYaml(fmContent);
-        if (parsedFm.title) title = parsedFm.title;
-        if (parsedFm.id) id = parsedFm.id;
-        if (parsedFm.branch) branch = parsedFm.branch;
-      } catch {
-        // Fallback to manual parsing if yaml parsing fails
-        const fmContent = fmMatch[1];
-        const titleMatch = fmContent.match(/title:\s*["']?(.+?)["']?\s*$/m);
-        const idMatch = fmContent.match(/id:\s*(.+?)\s*$/m);
-        const branchMatch = fmContent.match(/branch:\s*(.+?)\s*$/m);
-
-        if (titleMatch) title = titleMatch[1];
-        if (idMatch) id = idMatch[1];
-        if (branchMatch) branch = branchMatch[1];
-      }
-    }
-
-    // Parse sections from body
-    const body = fmMatch ? fmMatch[2] : content;
-
-    return {
-      id,
-      title,
-      status: PlanStatus.Draft,
-      created: now,
-      updated: now,
-      planner: 'llm',
-      branch,
-      objective: this.extractSection(body, 'Objective'),
-      currentState: this.extractSection(body, 'Current State'),
-      relevantFiles: this.extractList(body, 'Relevant Files'),
-      filesToModify: this.extractList(body, 'Files To Modify'),
-      filesToCreate: this.extractList(body, 'Files To Create'),
-      implementationSteps: this.extractSteps(body),
-      constraints: this.extractList(body, 'Constraints'),
-      testingStrategy:
-        this.extractSection(body, 'Testing Strategy') || this.extractSection(body, 'Testing'),
-      acceptanceCriteria: this.extractList(body, 'Acceptance Criteria'),
-      risks: this.extractList(body, 'Risks'),
-      outOfScope: this.extractList(body, 'Out Of Scope'),
-      dependencies: this.extractList(body, 'Dependencies'),
-    };
-  }
-
-  private createFallbackPlan(content: string, request: string): Plan {
-    const now = new Date().toISOString().split('T')[0];
-    return {
-      id: 'PLAN-XXX',
-      title: request.substring(0, 80),
-      status: PlanStatus.Draft,
-      created: now,
-      updated: now,
-      planner: 'llm',
-      branch: 'unknown',
-      objective: request,
-      currentState: '',
-      relevantFiles: [],
-      filesToModify: [],
-      filesToCreate: [],
-      implementationSteps: [
-        { number: 1, title: 'Implementation', description: content || request },
-      ],
-      constraints: [],
-      testingStrategy: '',
-      acceptanceCriteria: ['The request is implemented', 'Existing tests still pass'],
-      risks: [],
-      outOfScope: [],
-      dependencies: [],
-    };
-  }
-
-  // Helper to extract a section by heading
-  private extractSection(body: string, heading: string): string {
-    const regex = new RegExp(`^#\\s+${heading}\\s*$([\\s\\S]*?)(?=^#\\s|$)`, 'mi');
-    const match = body.match(regex);
-    return match ? match[1].trim() : '';
-  }
-
-  // Helper to extract a bullet list from a section
-  private extractList(body: string, heading: string): string[] {
-    const section = this.extractSection(body, heading);
-    if (!section) return [];
-    return section
-      .split('\n')
-      .map((line) => line.replace(/^\s*[-*]\s*/, '').trim())
-      .filter((line) => line.length > 0);
-  }
-
-  // Helper to extract implementation steps
-  private extractSteps(
-    body: string,
-  ): { number: number; title: string; description: string; files?: string[] }[] {
-    const stepsSection = this.extractSection(body, 'Implementation Steps');
-    if (!stepsSection) return [];
-
-    const stepRegex = /^##\s+Step\s+(\d+)(?::\s*(.+))?\s*$/gm;
-    const steps: { number: number; title: string; description: string }[] = [];
-    let match: RegExpExecArray | null;
-    const positions: { index: number; number: number; title: string }[] = [];
-
-    while ((match = stepRegex.exec(stepsSection)) !== null) {
-      positions.push({
-        index: match.index + match[0].length,
-        number: parseInt(match[1], 10),
-        title: match[2]?.trim() || `Step ${match[1]}`,
-      });
-    }
-
-    for (let i = 0; i < positions.length; i++) {
-      const start = positions[i].index;
-      const end =
-        i + 1 < positions.length
-          ? positions[i + 1].index - (positions[i + 1].title.length + 20)
-          : stepsSection.length;
-      const description = stepsSection.substring(start, end).trim();
-      steps.push({
-        number: positions[i].number,
-        title: positions[i].title,
-        description,
-      });
-    }
-
-    return steps;
   }
 }
