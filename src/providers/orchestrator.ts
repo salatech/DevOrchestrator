@@ -1,12 +1,14 @@
 import { generateText, generateObject, type LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import type { ZodSchema } from 'zod';
 import type { LLMRequest, LLMResponse, TokenUsage } from './types.js';
 import { UsageTracker } from './usage-tracker.js';
 import { ProviderError } from '../errors/index.js';
 import type { DevAIConfig } from '../config/types.js';
 import type { ProviderName } from './types.js';
+import { resolveApiKey } from '../config/loader.js';
 
 export type ModelRole = 'planner' | 'reviewer' | 'executor';
 
@@ -120,18 +122,37 @@ export class ModelOrchestrator {
 
     switch (providerName) {
       case 'openai': {
-        const openai = createOpenAI({});
+        const apiKey = resolveApiKey('openai');
+        if (!apiKey) {
+          throw new ProviderError('Missing API key for openai. Set OPENAI_API_KEY and retry.', {
+            provider: providerName,
+            model: modelName,
+          });
+        }
+        const openai = createOpenAI({ apiKey });
         return { providerName, modelName, model: openai(modelName) };
       }
       case 'anthropic': {
-        const anthropic = createAnthropic({});
+        const apiKey = resolveApiKey('anthropic');
+        if (!apiKey) {
+          throw new ProviderError(
+            'Missing API key for anthropic. Set ANTHROPIC_API_KEY and retry.',
+            { provider: providerName, model: modelName },
+          );
+        }
+        const anthropic = createAnthropic({ apiKey });
         return { providerName, modelName, model: anthropic(modelName) };
       }
       case 'google': {
-        throw new ProviderError(
-          'Google provider is configured. Install `@ai-sdk/google` or switch planner/reviewer to openai or anthropic.',
-          { provider: providerName, model: modelName },
-        );
+        const apiKey = resolveApiKey('google');
+        if (!apiKey) {
+          throw new ProviderError(
+            'Missing API key for google. Set GOOGLE_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY and retry.',
+            { provider: providerName, model: modelName },
+          );
+        }
+        const google = createGoogleGenerativeAI({ apiKey });
+        return { providerName, modelName, model: google(modelName) };
       }
       default:
         throw new ProviderError(`Unsupported provider: ${providerName}`, {

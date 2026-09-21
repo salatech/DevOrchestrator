@@ -97,7 +97,7 @@ export default defineCommand({
             runtime.config.planner.provider === 'anthropic'
               ? 'Export ANTHROPIC_API_KEY. Keys never belong in git or `.ai/` files.'
               : runtime.config.planner.provider === 'google'
-                ? 'Export GOOGLE_API_KEY, or switch planner.provider to openai/anthropic.'
+                ? 'Export GOOGLE_API_KEY (or GOOGLE_GENERATIVE_AI_API_KEY). Keys never belong in git or `.ai/` files.'
                 : 'Export OPENAI_API_KEY. Keys never belong in git or `.ai/` files.',
         });
 
