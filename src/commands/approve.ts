@@ -35,6 +35,7 @@ export default defineCommand({
 
       if (plan.status === PlanStatus.Approved) {
         p.log.info(`${plan.id} is already approved.`);
+        p.log.info(`Next: \`devorch execute ${plan.id}\``);
         p.outro('Done');
         return;
       }
@@ -48,6 +49,14 @@ export default defineCommand({
 
       if (plan.status === PlanStatus.Draft) {
         await runtime.planManager.transitionStatus(plan.id, PlanStatus.AwaitingApproval);
+      }
+
+      if (plan.status === PlanStatus.Completed || plan.status === PlanStatus.Failed) {
+        await runtime.planManager.transitionStatus(plan.id, PlanStatus.Approved);
+        p.log.success(`Reopened ${plan.id} as approved`);
+        p.log.info(`Next: \`devorch execute ${plan.id}\``);
+        p.outro('Done');
+        return;
       }
 
       await runtime.planManager.transitionStatus(plan.id, PlanStatus.Approved);
