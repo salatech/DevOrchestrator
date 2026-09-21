@@ -29,7 +29,8 @@ const HEADERS = {
 };
 
 const CURL_META = '__DEVORCH_HTTP__';
-const IMPORT_HINT = 'Copy the assistant reply into a file, then import it with:\n  devorch plan --chat <chatgpt|gemini|claude> --from reply.md';
+const IMPORT_HINT =
+  'Copy the assistant reply into a file, then import it with:\n  devorch plan --chat <chatgpt|gemini|claude> --from reply.md';
 
 export function isChatShareUrl(value: string): boolean {
   return detectShareUrl(value) !== undefined;
@@ -37,7 +38,9 @@ export function isChatShareUrl(value: string): boolean {
 
 export function detectShareUrl(value: string): DetectedShare | undefined {
   const raw = value.trim();
-  let match = raw.match(/^https?:\/\/(?:www\.)?(?:chatgpt\.com|chat\.openai\.com)\/share\/([^/?#\s]+)/i);
+  let match = raw.match(
+    /^https?:\/\/(?:www\.)?(?:chatgpt\.com|chat\.openai\.com)\/share\/([^/?#\s]+)/i,
+  );
   if (match) return { service: 'chatgpt', shareId: match[1], url: canonicalize(raw) };
   match = raw.match(/^https?:\/\/(?:www\.)?claude\.ai\/share\/([^/?#\s]+)/i);
   if (match) return { service: 'claude', shareId: match[1], url: canonicalize(raw) };
@@ -92,11 +95,11 @@ export async function fetchShareConversation(
 }
 
 export function pickPlanText(messages: ShareMessage[], title?: string): string {
-  const assistants = messages.filter((message) => message.role === 'assistant' && message.content.trim());
+  const assistants = messages.filter(
+    (message) => message.role === 'assistant' && message.content.trim(),
+  );
   if (assistants.length === 0) {
-    throw new Error(
-      ['The shared chat has no assistant reply to import.', IMPORT_HINT].join('\n'),
-    );
+    throw new Error(['The shared chat has no assistant reply to import.', IMPORT_HINT].join('\n'));
   }
   const scored = [...assistants].sort((a, b) => planScore(b.content) - planScore(a.content));
   const best = scored[0];
@@ -196,7 +199,11 @@ async function extractGemini(
   );
 }
 
-async function fetchHtml(url: string, fetchImpl: typeof fetch, service: ShareService): Promise<string> {
+async function fetchHtml(
+  url: string,
+  fetchImpl: typeof fetch,
+  service: ShareService,
+): Promise<string> {
   const { html } = await fetchHtmlWithUrl(url, fetchImpl, service);
   return html;
 }
@@ -233,14 +240,20 @@ async function requestShare(
       const viaCurl = await tryCurlGet(url);
       if (viaCurl) {
         if (viaCurl.status >= 400) throw shareHttpError(service, viaCurl.status, viaCurl.finalUrl);
-        return { text: viaCurl.body, finalUrl: viaCurl.finalUrl || url, status: viaCurl.status || 200 };
+        return {
+          text: viaCurl.body,
+          finalUrl: viaCurl.finalUrl || url,
+          status: viaCurl.status || 200,
+        };
       }
     }
     throw shareNetworkError(error, url, service);
   }
 }
 
-async function tryCurlGet(url: string): Promise<{ body: string; status: number; finalUrl: string } | undefined> {
+async function tryCurlGet(
+  url: string,
+): Promise<{ body: string; status: number; finalUrl: string } | undefined> {
   try {
     const result = await execa(
       'curl',
@@ -267,7 +280,10 @@ async function tryCurlGet(url: string): Promise<{ body: string; status: number; 
   }
 }
 
-function parseCurlOutput(stdout: string, fallbackUrl: string): { body: string; status: number; finalUrl: string } {
+function parseCurlOutput(
+  stdout: string,
+  fallbackUrl: string,
+): { body: string; status: number; finalUrl: string } {
   const marker = `\n${CURL_META}\t`;
   const index = stdout.lastIndexOf(marker);
   if (index === -1) return { body: stdout, status: 200, finalUrl: fallbackUrl };
@@ -322,7 +338,8 @@ export function errorDetail(error: unknown): string {
     seen.add(current);
     const code = codeOf(current);
     if (current instanceof Error) {
-      const line = code && !current.message.includes(code) ? `${current.message} (${code})` : current.message;
+      const line =
+        code && !current.message.includes(code) ? `${current.message} (${code})` : current.message;
       if (line && !parts.includes(line)) parts.push(line);
       current = current.cause;
       continue;
@@ -361,7 +378,11 @@ function networkReason(code: string | undefined, error: unknown): string {
   if (code === 'ECONNREFUSED') {
     return 'The connection was refused. Check the URL and your internet connection.';
   }
-  if (code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT') {
+  if (
+    code === 'ETIMEDOUT' ||
+    code === 'UND_ERR_CONNECT_TIMEOUT' ||
+    code === 'UND_ERR_HEADERS_TIMEOUT'
+  ) {
     return 'The request timed out. Check your internet connection and try again.';
   }
   if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
@@ -456,7 +477,11 @@ function parseJsonBlobs(html: string): unknown[] {
   return blobs;
 }
 
-function collectChatGptMessages(node: unknown, into: ShareMessage[], seen = new Set<unknown>()): void {
+function collectChatGptMessages(
+  node: unknown,
+  into: ShareMessage[],
+  seen = new Set<unknown>(),
+): void {
   if (!node || typeof node !== 'object' || seen.has(node)) return;
   seen.add(node);
   if (Array.isArray(node)) {
@@ -465,7 +490,8 @@ function collectChatGptMessages(node: unknown, into: ShareMessage[], seen = new 
   }
   const record = node as Record<string, unknown>;
   const author = record.author as { role?: string } | undefined;
-  const content = record.content as { content_type?: string; parts?: unknown[]; text?: string } | undefined;
+  const content = record.content as
+    { content_type?: string; parts?: unknown[]; text?: string } | undefined;
   const role = author?.role;
   if ((role === 'user' || role === 'assistant') && content) {
     const text = chatGptPartsToText(content).trim();
@@ -495,7 +521,11 @@ function walkGeminiTurns(html: string): ShareMessage[] {
   return messages;
 }
 
-function collectGeminiStrings(node: unknown, into: ShareMessage[], seen = new Set<unknown>()): void {
+function collectGeminiStrings(
+  node: unknown,
+  into: ShareMessage[],
+  seen = new Set<unknown>(),
+): void {
   if (!node || seen.has(node)) return;
   if (typeof node === 'string') {
     if (planScore(node) >= 2) into.push({ role: 'assistant', content: node });

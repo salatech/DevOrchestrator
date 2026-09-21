@@ -89,7 +89,8 @@ What to do, in enough detail for a coding agent.
   if (files.length > 0) {
     prompt += `\n# Existing files (local, truncated)\n`;
     for (const file of files) {
-      const snippet = file.content.length > 2500 ? `${file.content.slice(0, 2500)}\n…` : file.content;
+      const snippet =
+        file.content.length > 2500 ? `${file.content.slice(0, 2500)}\n…` : file.content;
       prompt += `\n### ${file.path}\n\`\`\`\n${snippet}\n\`\`\`\n`;
     }
   }
@@ -154,9 +155,7 @@ export async function readPlanReply(
 ): Promise<string | undefined> {
   const requested = typedPath?.trim();
   if (requested) {
-    const resolved = path.isAbsolute(requested)
-      ? requested
-      : path.resolve(projectRoot, requested);
+    const resolved = path.isAbsolute(requested) ? requested : path.resolve(projectRoot, requested);
     try {
       const content = await fs.readFile(resolved, 'utf8');
       if (content.trim().length < 20) {

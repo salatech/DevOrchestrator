@@ -57,8 +57,7 @@ export function parseChatPlan(
     filesToCreate,
     implementationSteps,
     constraints: extractList(body, 'Constraints'),
-    testingStrategy:
-      extractSection(body, 'Testing Strategy') || extractSection(body, 'Testing'),
+    testingStrategy: extractSection(body, 'Testing Strategy') || extractSection(body, 'Testing'),
     acceptanceCriteria:
       extractList(body, 'Acceptance Criteria').length > 0
         ? extractList(body, 'Acceptance Criteria')
@@ -150,9 +149,7 @@ function extractHeadingTitle(body: string): string | undefined {
 
 function extractSection(body: string, heading: string): string {
   const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(
-    `(?:^|\\n)#{1,3}\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n#\\s[^#]|$)`,
-  );
+  const regex = new RegExp(`(?:^|\\n)#{1,3}\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n#\\s[^#]|$)`);
   const match = body.match(regex);
   return match ? match[1].trim() : '';
 }

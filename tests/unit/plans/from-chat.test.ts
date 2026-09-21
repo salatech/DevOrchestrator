@@ -37,7 +37,8 @@ Wire button clicks.
   });
 
   it('unwraps fenced replies and numbered lists', () => {
-    const raw = '```markdown\n# Objective\nDo it\n\n# Implementation Steps\n1. Create index.html\n2. Add CSS\n```';
+    const raw =
+      '```markdown\n# Objective\nDo it\n\n# Implementation Steps\n1. Create index.html\n2. Add CSS\n```';
     const plan = parseChatPlan(raw, 'do it');
     expect(plan.implementationSteps.length).toBeGreaterThanOrEqual(2);
     expect(plan.implementationSteps[0].description).toContain('index.html');

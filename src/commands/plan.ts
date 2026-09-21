@@ -145,17 +145,14 @@ async function importPlanFromShareLink(options: { url: string; request?: string 
   const detected = detectShareUrl(options.url);
   const userAsk =
     conversation.messages.find((message) => message.role === 'user')?.content ?? options.request;
-  const request = options.request?.trim() || userAsk?.trim() || conversation.title || 'Imported from chat';
+  const request =
+    options.request?.trim() || userAsk?.trim() || conversation.title || 'Imported from chat';
 
   await writeInboxFile(inboxPlanPath(runtime.root), conversation.planText);
 
   const git = await runtime.workspace.getGitState().catch(() => null);
   const nextId = await runtime.planManager.getNextId();
-  const parsed = parseChatPlan(
-    conversation.planText,
-    request,
-    `${conversation.service}-share`,
-  );
+  const parsed = parseChatPlan(conversation.planText, request, `${conversation.service}-share`);
   assertImportedPlan(parsed, conversation.planText);
   const plan: Plan = {
     ...parsed,
@@ -262,7 +259,9 @@ async function afterPlanCreated(
 ): Promise<void> {
   console.log('\n' + formatPlan(plan) + '\n');
 
-  let action: 'approve' | 'edit' | 'regenerate' | 'reject' = yes ? 'approve' : await promptPlanApproval();
+  let action: 'approve' | 'edit' | 'regenerate' | 'reject' = yes
+    ? 'approve'
+    : await promptPlanApproval();
 
   if (action === 'edit' && regenerate) {
     const notes = await promptText(
@@ -295,7 +294,9 @@ async function afterPlanCreated(
       p.log.warn(`Cancelled ${revised.id}`);
     }
   } else if (action === 'edit') {
-    p.log.info('Browser plans: change the chat reply, save .ai/inbox/plan.md, then run --from again.');
+    p.log.info(
+      'Browser plans: change the chat reply, save .ai/inbox/plan.md, then run --from again.',
+    );
   } else if (action === 'regenerate' && regenerate) {
     const runtime = await createAgentRuntime();
     await runtime.planManager.transitionStatus(plan.id, PlanStatus.Cancelled);
@@ -308,7 +309,9 @@ async function afterPlanCreated(
     console.log('\n' + formatPlan(regenerated) + '\n');
     p.log.info(`Generated ${regenerated.id} (previous plan cancelled)`);
   } else if (action === 'regenerate') {
-    p.log.info(`Run again: devorch plan --chat ${plan.planner.replace(/-chat$/, '')} "your request"`);
+    p.log.info(
+      `Run again: devorch plan --chat ${plan.planner.replace(/-chat$/, '')} "your request"`,
+    );
   } else if (action === 'reject') {
     const runtime = await openWorkspace();
     await runtime.planManager.transitionStatus(plan.id, PlanStatus.Cancelled);

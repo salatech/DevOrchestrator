@@ -13,7 +13,9 @@ describe('plans/share-link', () => {
     expect(detectShareUrl('https://gemini.google.com/share/ggg')?.service).toBe('gemini');
     expect(detectShareUrl('https://g.co/gemini/share/ggg')?.url).toContain('g.co/gemini/share/ggg');
     expect(detectShareUrl('https://share.gemini.google/HjpFVh21AFUs')?.service).toBe('gemini');
-    expect(detectShareUrl('https://share.gemini.google/HjpFVh21AFUs')?.shareId).toBe('HjpFVh21AFUs');
+    expect(detectShareUrl('https://share.gemini.google/HjpFVh21AFUs')?.shareId).toBe(
+      'HjpFVh21AFUs',
+    );
     expect(detectShareUrl('https://share.gemini.google/HjpFVh21AFUs')?.url).toBe(
       'https://share.gemini.google/HjpFVh21AFUs',
     );
@@ -67,17 +69,16 @@ describe('plans/share-link', () => {
         author: { role: 'assistant' },
         content: {
           content_type: 'text',
-          parts: ['# Objective\nShip a calculator\n# Implementation Steps\n## Step 1: HTML\nWrite it'],
+          parts: [
+            '# Objective\nShip a calculator\n# Implementation Steps\n## Step 1: HTML\nWrite it',
+          ],
         },
       },
     };
     const html = `<html><title>ChatGPT - Calc</title><script>${JSON.stringify(payload)}</script></html>`;
     const fetchImpl: typeof fetch = async () =>
       new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
-    const conversation = await fetchShareConversation(
-      'https://chatgpt.com/share/abc',
-      fetchImpl,
-    );
+    const conversation = await fetchShareConversation('https://chatgpt.com/share/abc', fetchImpl);
     expect(conversation.planText).toContain('calculator');
   });
 
@@ -109,12 +110,12 @@ describe('plans/share-link', () => {
 
   it('explains HTTP status instead of a bare fetch failure', async () => {
     const fetchImpl: typeof fetch = async () => new Response('nope', { status: 404 });
-    await expect(fetchShareConversation('https://claude.ai/share/missing', fetchImpl)).rejects.toThrow(
-      /HTTP 404/,
-    );
-    await expect(fetchShareConversation('https://claude.ai/share/missing', fetchImpl)).rejects.toThrow(
-      /not found or the link expired/,
-    );
+    await expect(
+      fetchShareConversation('https://claude.ai/share/missing', fetchImpl),
+    ).rejects.toThrow(/HTTP 404/);
+    await expect(
+      fetchShareConversation('https://claude.ai/share/missing', fetchImpl),
+    ).rejects.toThrow(/not found or the link expired/);
   });
 
   it('explains Node header-overflow fetch failures', async () => {

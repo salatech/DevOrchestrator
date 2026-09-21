@@ -221,9 +221,11 @@ export class Orchestrator {
 
         const midSnapshot = await this.snapshotManager.capture(this.workspace);
         const midDiff = this.snapshotManager.compare(snapshotBefore, midSnapshot);
-        const projectChanges = [...midDiff.filesAdded, ...midDiff.filesModified, ...midDiff.filesRemoved].filter(
-          (file) => !file.startsWith('.ai/'),
-        );
+        const projectChanges = [
+          ...midDiff.filesAdded,
+          ...midDiff.filesModified,
+          ...midDiff.filesRemoved,
+        ].filter((file) => !file.startsWith('.ai/'));
 
         if (reviewResult.status === 'approved' && projectChanges.length === 0) {
           lastResult =
