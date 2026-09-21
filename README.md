@@ -50,11 +50,11 @@ DevOrchestrator treats those as separate roles:
 
 | Role | Job | Default implementation |
 |---|---|---|
-| **Planner** | Read the repo and produce a structured plan | LLM via OpenAI or Anthropic |
+| **Planner** | Read the repo and produce a structured plan | Browser chatbot (ChatGPT / Gemini / Claude), or LLM via OpenAI / Anthropic / Google |
 | **Human** | Approve, edit, regenerate, or reject | CLI prompts |
 | **Executor** | Implement the approved plan | Codex CLI, Claude Code CLI, or LLM fallback |
 | **Validator** | Run your test/lint/typecheck commands | Local shell, policy-gated |
-| **Reviewer** | Judge the diff against acceptance criteria | LLM via OpenAI or Anthropic |
+| **Reviewer** | Judge the local file changes against acceptance criteria | LLM via OpenAI / Anthropic / Google |
 
 The planner does not implement. The executor does not redefine the objective. The reviewer does not write the plan. The workspace, not chat history, is authoritative.
 
@@ -84,8 +84,8 @@ Executor ─── Codex / Claude Code / LLM file writes
 Validation commands ─── test, typecheck, lint (optional, from config)
   │
   ▼
-Reviewer LLM ─── approved → completed
-             ─── changes requested → executor retries (up to maxIterations)
+Reviewer LLM ─── approved (and project files changed) → completed
+             ─── no app files changed, or changes requested → executor retries (up to maxIterations)
   │
   ▼
 Trace ─── .ai/runs/RUN-00N.json
@@ -183,11 +183,19 @@ pnpm dev doctor
    devorch doctor
    ```
 
-3. Create a plan:
+3. Create a plan (browser chatbot, no API key):
 
    ```bash
-   devorch plan "Add rate limiting to the public API"
+   devorch plan --chat gemini "Add rate limiting to the public API"
    ```
+
+   Or import a reply you already saved:
+
+   ```bash
+   devorch plan --from reply.md
+   ```
+
+   API planner (needs a key): `devorch plan "Add rate limiting to the public API"`.
 
    You will be asked to **Approve**, **Edit**, **Regenerate**, or **Reject**. After approve, you can execute immediately or later.
 
@@ -224,16 +232,16 @@ devorch <command> --help
 | Command | Purpose | Needs `.ai/` | Needs API key |
 |---|---|---|---|
 | `init` | Create `.ai/` layout, config, stub docs, skills | No | Optional (better docs if present) |
-| `plan` | Generate a plan from a request | Yes | Yes |
-| `approve` | Mark a plan approved | Yes | No |
-| `execute` | Run an approved plan | Yes | Yes (or executor CLI) |
-| `review` | Review current diff against a plan | Yes | Yes |
+| `plan` | Generate or import a plan | Yes | No for `--chat` / `--from` / `--link`; yes for API planner |
+| `approve` | Mark a plan approved (or reopen completed/failed) | Yes | No |
+| `execute` | Run an approved plan (or re-run completed/failed) | Yes | Yes (or executor CLI) |
+| `review` | Review local workspace changes against a plan | Yes | Yes |
 | `run` | Plan + approve + execute | Yes | Yes |
 | `plans` | List plans | Yes | No |
 | `show` | Print one plan | Yes | No |
 | `status` | Project, git, active plan, models | Yes | No |
 | `context` | Preview planner context | Yes | No |
-| `diff` | Colorized git diff | Yes | No |
+| `diff` | Local workspace changes (git if available) | Yes | No |
 | `doctor` | Environment checks | No | No |
 
 ### `devorch init`
@@ -242,10 +250,10 @@ Detects the workspace root, stack, package manager, and scripts, then creates:
 
 - `.ai/PROJECT.md`, `.ai/ARCHITECTURE.md`, `.ai/CONVENTIONS.md`
 - `.ai/.devai.json` with detected validation scripts when possible
-- `.ai/plans/`, `.ai/tasks/`, `.ai/skills/`, `.ai/state/`, `.ai/runs/`
+- `.ai/plans/`, `.ai/tasks/`, `.ai/skills/`, `.ai/state/`, `.ai/runs/`, `.ai/inbox/`
 - stub skills (`testing`, and `typescript` when JS/TS is detected)
 - `.ai/.gitignore` for `state/` and `runs/`
-- root `.gitignore` entries for `.ai/state/` and `.ai/runs/`
+- root `.gitignore` entries for `.ai/state/`, `.ai/runs/`, and `.ai/inbox/`
 
 If `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` is set, init asks the planner model to draft PROJECT.md and ARCHITECTURE.md. On failure it falls back to stubs.
 
@@ -257,25 +265,54 @@ If `.ai/` already exists, init fills in missing files unless `--force` is passed
 
 ### `devorch plan "<request>"`
 
-Builds context, calls the planner, writes `.ai/plans/PLAN-00N-title.md`, and sets status to `awaiting_approval`.
+**Preferred (no API key):** plan in ChatGPT, Gemini, or Claude in your browser, then import the reply.
 
-Then prompts:
+```bash
+devorch plan --chat gemini "create a normal calculator app with html and css and js"
+```
 
-- **Approve** — transition to `approved`; optionally execute now
-- **Edit** — cancel the current plan, regenerate with extra instructions
-- **Regenerate** — cancel and create a new plan from the same request
-- **Reject** — cancel
+That copies a local-context prompt, opens the chatbot, and waits until you save the reply to `.ai/inbox/plan.md` (or another file with `--from`). Then it becomes `PLAN-00N`.
+
+**Already planned in the browser?** For ChatGPT and Claude, import a **public** share link:
+
+```bash
+devorch plan --link "https://chatgpt.com/share/xxxxxxxx"
+devorch plan --link "https://claude.ai/share/xxxxxxxx"
+```
+
+Gemini public share pages (`share.gemini.google/…`, `gemini.google.com/share/…`, `g.co/gemini/share/…`) load the conversation with JavaScript in the browser, so `--link` cannot read the replies from HTML. Copy Gemini’s reply into a file in the project, then:
+
+```bash
+devorch plan --from reply.md
+```
+
+`--from` must point at a real file (relative to the project). If the file is missing, the command fails instead of importing whatever is on the clipboard.
+
+The ChatGPT/Claude chat must be a **public share link** (Share → copy link). A normal private chat URL will not work.
+
+```bash
+devorch plan --chat chatgpt "…"
+devorch plan --chat claude "…"
+devorch plan --from .ai/inbox/plan.md
+```
+
+**API planner:** `devorch plan "…"` still calls the configured provider key (OpenAI / Anthropic / Gemini API).
+
+After import it prompts Approve / Edit / Regenerate / Reject as before.
 
 | Argument / flag | Description |
 |---|---|
-| `<request>` | Natural-language task (required) |
+| `<request>` | Natural-language task (required unless `--from`) |
+| `--chat chatgpt\|gemini\|claude` | Plan in the browser chatbot (no API key) |
+| `--link <url>` | Import a public ChatGPT or Claude share (Gemini: use `--from`) |
+| `--from <file>` | Import a saved chatbot reply (file must exist in the project) |
 | `--include <files>` | Comma-separated extra files to force into context |
 | `--yes`, `-y` | Approve immediately (does not auto-execute) |
 
 Example:
 
 ```bash
-devorch plan "Add Google OAuth" --include src/auth.ts,src/routes/login.ts
+devorch plan --chat gemini "Add Google OAuth"
 ```
 
 ### `devorch approve <plan-id>`
@@ -284,6 +321,7 @@ Loads the plan, shows it, and transitions:
 
 - `draft` → `awaiting_approval` → `approved`
 - `awaiting_approval` → `approved`
+- `completed` or `failed` → `approved` (re-open so you can execute again)
 
 Already-approved plans are left unchanged.
 
@@ -293,7 +331,7 @@ Already-approved plans are left unchanged.
 
 ### `devorch execute <plan-id>`
 
-Requires status `approved`. Confirms, then runs the [execution loop](#execution-loop).
+Requires status `approved`, or confirms before reopening `completed` / `failed` back to `approved`. Then runs the [execution loop](#execution-loop). Works in folders that are not git repositories (review uses local files, not git-only diffs).
 
 | Flag | Description |
 |---|---|
@@ -303,7 +341,7 @@ If the configured CLI agent is missing and an API key exists, DevOrchestrator wa
 
 ### `devorch review <plan-id>`
 
-Reviews the **current unstaged git diff** against the plan’s objective and acceptance criteria. If the plan is `executing` or `validating`, it moves to `reviewing`; if the reviewer approves from `reviewing`, the plan becomes `completed`.
+Reviews **local workspace files** (and git diff if present) against the plan’s objective and acceptance criteria. If the plan is `executing` or `validating`, it moves to `reviewing`; if the reviewer approves from `reviewing` **and** project files outside `.ai/` changed, the plan becomes `completed`.
 
 ### `devorch run "<request>"`
 
@@ -356,7 +394,7 @@ Shows which `.ai/` docs loaded, scored files, matched skills, git branch, and pl
 
 ### `devorch diff`
 
-Colorized `git diff` plus insert/delete stats.
+Shows local workspace changes first (files on disk). `--staged` still uses git, when the folder is a git repo.
 
 | Flag | Description |
 |---|---|
@@ -448,8 +486,9 @@ draft
                               └→ failed
       → cancelled
 
-failed → draft   (re-open)
-completed / cancelled are terminal
+failed → draft or approved   (re-open)
+completed → approved         (re-run)
+cancelled is terminal
 ```
 
 | Status | Meaning |
@@ -460,8 +499,8 @@ completed / cancelled are terminal
 | `executing` | Coding agent is working |
 | `validating` | Configured validation commands are running |
 | `reviewing` | Reviewer is judging the diff |
-| `completed` | Reviewer approved |
-| `failed` | Blocked, validation never passed, or max iterations hit |
+| `completed` | Reviewer approved and project files changed; can be re-run |
+| `failed` | Blocked, validation never passed, max iterations hit, or no app files changed; can be re-opened |
 | `cancelled` | Rejected or abandoned |
 
 Invalid transitions throw `PlanningError`.
@@ -472,17 +511,18 @@ Invalid transitions throw `PlanningError`.
 
 `devorch execute PLAN-00N` (and `devorch run --yes`):
 
-1. Load the plan; require `approved`.
+1. Load the plan; require `approved` (or `reviewing` to retry). `completed` / `failed` can be reopened to `approved` from the execute prompt.
 2. Transition to `executing`.
-3. Snapshot git state (branch, HEAD, modified, untracked, deleted).
+3. Snapshot local files (fingerprints) and git state when git exists.
 4. Rebuild context from the plan objective.
 5. For `iteration = 1..limits.maxIterations`:
    1. Send plan + instructions + prior feedback to the executor.
    2. If the executor returns `blocked`, mark `failed` and stop.
    3. If `validation.commands` is non-empty, run each command under the security policy.
       - Failure feeds the command output back to the executor and retries.
-   4. Reviewer sees the git diff plus validation summary.
-      - `approved` → `completed`
+   4. Reviewer sees **local file changes** (preferred) plus git diff if available, and the validation summary.
+      - `approved` **and** files outside `.ai/` changed → `completed`
+      - `approved` but only `.ai/` (or nothing) changed → retry, or `failed` after max iterations (the report matches the plan status)
       - `changes_requested` → findings go back to the executor
 6. Snapshot again, write `.ai/runs/RUN-00N.json`, print an execution report (files, line stats, validation, review, duration).
 
@@ -823,9 +863,9 @@ Run `devorch init` in the project (or a subdirectory of it).
 
 Export `OPENAI_API_KEY` (or switch `planner.provider` / set `ANTHROPIC_API_KEY`). Confirm with `devorch doctor`.
 
-### `Plan PLAN-00N is not approved`
+### `Plan PLAN-00N is not approved` / cannot execute from `completed`
 
-`execute` only accepts `approved`. Run `devorch approve PLAN-00N` or approve at the plan prompt.
+`execute` accepts `approved` or `reviewing`. Completed or failed plans can be run again: `devorch execute PLAN-00N` asks to reopen them. Or run `devorch approve PLAN-00N` first.
 
 ### `Executor "codex" requires the \`codex\` CLI`
 
@@ -849,7 +889,15 @@ Only **one** config file is read. `devai.config.ts` wins over root `.devai.json`
 
 ### Google provider errors
 
-The schema allows `"provider": "google"`, but the runtime currently tells you to install `@ai-sdk/google` or switch to `openai` / `anthropic`.
+Set `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`. Confirm with `devorch doctor`. The Google adapter (`@ai-sdk/google`) is included.
+
+### Gemini `--link` says the page has no conversation text
+
+That is expected. Gemini share pages are a JavaScript app. Copy the assistant reply into `reply.md` in the project folder and run `devorch plan --from reply.md`.
+
+### `--from reply.md` cannot read the file
+
+The path is resolved from the **project root** (the folder with `.ai/`), not necessarily the directory you ran the command from if you are elsewhere. Put the file in the project and pass a path relative to that root.
 
 ---
 
@@ -862,7 +910,7 @@ MVP (0.1.0) does **not** include:
 - GitHub PR creation
 - cloud sync or team-shared context beyond git
 - multi-agent parallel execution
-- a dedicated Google provider adapter until `@ai-sdk/google` is added
+- importing Gemini public share pages (`--link`); use `--from` instead
 - a separate `validation/` package (validation runs inside the orchestrator)
 
 The product is a **local CLI**. Keep secrets in the environment, not in `.ai/` docs.
