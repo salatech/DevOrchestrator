@@ -12,7 +12,7 @@ devorch execute PLAN-001
 devorch review PLAN-001
 ```
 
-Current version: **0.1.0**. Requires **Node.js 20+**.
+Current version: **0.2.0**. Requires **Node.js 20+**.
 
 ---
 
@@ -98,7 +98,7 @@ All filesystem writes go through a workspace sandbox. Validation commands go thr
 ## Requirements
 
 - **Node.js** `>= 20`
-- **Git** in `PATH` (used for status, diffs, snapshots)
+- **Git** in `PATH` (optional; execute/review work without a repo)
 - A project root that contains `.git` or `package.json` (DevOrchestrator walks up from the current directory)
 - For planning and review: an API key for the configured provider
 - For execution, one of:
@@ -113,9 +113,9 @@ All filesystem writes go through a workspace sandbox. Validation commands go thr
 After the package is published:
 
 ```bash
-npm install -g @salatech/devorch
+npm install -g @salatech/devorch@alpha
 # or
-pnpm add -g @salatech/devorch
+pnpm add -g @salatech/devorch@alpha
 ```
 
 The executable is **`devorch`** (package name `@salatech/devorch`). Then:
@@ -149,9 +149,9 @@ devorch --help
 The published binary name is `devorch` (package name `@salatech/devorch`):
 
 ```bash
-pnpm add -g @salatech/devorch
+pnpm add -g @salatech/devorch@alpha
 # or
-npm install -g @salatech/devorch
+npm install -g @salatech/devorch@alpha
 ```
 
 ### Development runner (no build)
@@ -903,7 +903,7 @@ The path is resolved from the **project root** (the folder with `.ai/`), not nec
 
 ## Current limitations
 
-MVP (0.1.0) does **not** include:
+MVP (0.2.0) does **not** include:
 
 - MCP server or editor extension
 - embeddings / semantic search (file selection is heuristic)

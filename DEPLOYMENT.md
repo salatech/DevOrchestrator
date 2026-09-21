@@ -71,7 +71,7 @@ CI never publishes and never deploys infrastructure.
 1. Update `CHANGELOG.md`.
 2. Set `version` in `package.json` (the only version source).
 3. Merge to `main`.
-4. Tag: `git tag v0.1.0 && git push origin v0.1.0`
+4. Tag: `git tag v0.2.0 && git push origin v0.2.0`
 5. The Release workflow builds, packs, uploads the `.tgz`, and creates a GitHub Release.
 6. Publish to npm **only when maintainers explicitly decide to**:
 
@@ -80,7 +80,7 @@ CI never publishes and never deploys infrastructure.
    npm publish --access public --tag alpha
    ```
 
-   The package name is `@salatech/devorch`. The executable is `devorch`. First publish uses the `alpha` dist-tag so `npm install @salatech/devorch` does not pick it up as a live default until you later `npm dist-tag add @salatech/devorch@0.1.0 latest`.
+   The package name is `@salatech/devorch`. The executable is `devorch`. Alpha publishes use the `alpha` dist-tag so `npm install @salatech/devorch` does not pick it up as a live default until you later `npm dist-tag add @salatech/devorch@0.2.0 latest`.
 
 There is no automatic `npm publish` from CI.
 
@@ -95,7 +95,7 @@ devorch doctor
 From a GitHub Release tarball:
 
 ```bash
-npm install -g ./salatech-devorch-0.1.0.tgz
+npm install -g ./salatech-devorch-0.2.0.tgz
 ```
 
 From this repository without publishing:
